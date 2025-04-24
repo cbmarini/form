@@ -41,6 +41,8 @@
 #include "form3.h"
 #include <math.h>
 #include <gmp.h>
+#include <mpfr.h>
+#define RND MPFR_RNDN
 
 #define WITHCUTOFF
 
@@ -2505,10 +2507,12 @@ void CalculateNielsen(mpf_t result, int n, int p, mpf_t arg) {
  		#[ CalculateLin :
 */
 int CalculateLin(mpf_t result, int weight, mpf_t arg) {
-	int j,jmax,w,retval;
+	int j,jmax,k,w,retval;
 	long prec = AC.DefaultPrecision;
-	mpf_t absarg,arg2,sum,jm,jjm;
-	mpf_init(absarg); mpf_init(arg2); mpf_init(sum); mpf_init(jm); mpf_init(jjm);  
+	mpf_t absarg,arg2,sum,jm,jjm,log1,log2;
+	mpf_init(absarg); mpf_init(arg2); mpf_init(sum); mpf_init(jm); mpf_init(jjm); mpf_init(log1); mpf_init(log2);
+	mpfr_t log1r,log2r;
+	mpfr_init2(log1r,prec); mpfr_init2(log2r,prec);
 
 /*
 	We only consider -1 <= arg <= 1:
@@ -2538,12 +2542,36 @@ int CalculateLin(mpf_t result, int weight, mpf_t arg) {
 /*
 	For 1/2 < x < 1 we use the transformation 1 - x:
 		lin_(s,x) = sum_(k,0,s-2,(mzv_(s-k)-S_(1,s-1-k,1-x))*ln_(x)^k*invfac_(k)) 
-			  	- ln_(x)^(s-1)*ln_(1-x)/(s-1)!
+			  		- ln_(x)^(s-1)*ln_(1-x)*invfac_(s-1)
 	with S_(n,p,x) the Nielsen polylogarithm.
 */
 	if ( mpf_cmp_d(arg,(double)0.5) > 0 ) {
 		mpf_ui_sub(arg2,(unsigned long)1,arg);
-		CalculateNielsen(result,3,4,arg2);
+		mpfr_set_f(log1r,arg,RND); mpfr_log(log1r,log1r,RND); mpfr_get_f(log1,log1r,RND);
+		mpfr_set_f(log2r,arg2,RND); mpfr_log(log2r,log2r,RND); mpfr_get_f(log2,log2r,RND);
+		mpfr_clear(log1r); mpfr_clear(log2r);
+		
+		mpf_pow_ui(sum,log1,weight-1);
+		mpf_mul(sum,sum,log2);
+		for ( j = 1; j < weight; j++ ) {
+			mpf_div_ui(sum,sum,(unsigned long)j);
+		}
+		mpf_neg(sum,sum);
+
+		for ( j = 0; j <= weight-2; j++ ) {
+			w = weight - j;
+			CalculateMZV(jm, &w, 1);
+			CalculateNielsen(jjm, 1, weight - j -1, arg2);
+			mpf_sub(jm,jm,jjm);
+			for ( k = 1; k <=j; k++) {
+				mpf_mul(jm,jm,log1);
+				mpf_div_ui(jm,jm,(unsigned long)k);
+			}
+			mpf_add(sum,sum,jm);
+		}
+		mpf_set(result,sum);
+		mpf_clear(arg2); mpf_clear(log1); mpf_clear(log2);
+
 		retval = 0;
 		goto End;
 	}
