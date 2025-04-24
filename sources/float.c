@@ -2444,6 +2444,84 @@ int GetLinArgument(int *weight, mpf_t f_out, WORD *fun) {
 }
 /*
  		#] GetLinArgument :
+ 		#[ CalculateLin :
+*/
+int CalculateLin(mpf_t result, int weight, mpf_t arg) {
+	int j,jmax,w,retval;
+	long prec = AC.DefaultPrecision;
+	mpf_t absarg,sum,jm,jjm;
+	mpf_init(absarg); mpf_init(sum); mpf_init(jm); mpf_init(jjm);  
+
+/*
+	We only consider -1 <= arg <= 1:
+*/
+	mpf_abs(absarg,arg);
+	if (mpf_cmp_ui(absarg,1L) > 0 ) {
+		retval = 1;
+		goto End;
+	}
+/*
+	lin_(weight,1) = mzv_(weight);
+*/
+	if (mpf_cmp_ui(arg,1L) == 0) {
+		CalculateMZV(result,&weight,1);
+		retval = 0;
+		goto End;
+	}
+/*
+	lin_(weight,-1) = euler_(-weight);
+*/
+	if (mpf_cmp_si(arg,-1L) == 0) {
+		w = -weight;
+		CalculateEuler(result,&w,1);
+		retval = 0;
+		goto End;
+	}
+/*
+	For 1/2 < x < 1 we use the transformation 1 - x:
+		lin_(s,x) = sum_(k,0,s-2,(mzv_(s-k)-S_(1,s-1-k,1-x))*ln_(x)^k*invfac_(k)) 
+			  	- ln_(x)^(s-1)*ln_(1-x)/(s-1)!
+	with S_(n,p,x) the Nielsen polylogarithm.
+*/
+	if ( mpf_cmp_d(arg,(double)0.5) > 0 ) {
+		/* Here comes the above transformation, for now we just evaluate the naive sum. */
+		goto NaiveSum;
+	}
+/*
+	For -1 < x < -1/2, we can use the Bernoulli substitution:
+		lin_(s,x) = sum_(j,0,inf, C_s(j)*(-ln_(1-x))^(j+1)*invfac_(j+1)),
+	with C_1(j) = delta_(j,0) and
+		C_(n+1)(j) = sum_(k,0,j,binom_(j,k)*B_(j-k)*C_n(k)/(k+1))
+	where B_(k) are the Bernoulli numbers.
+
+*/
+	if ( mpf_cmp_d(arg,-0.5) < 0 ) {
+		/* Here comes the above transformation, for now we just evaluate the naive sum. */
+		goto NaiveSum;
+	}
+NaiveSum:
+/*
+	The bounds on the terms of the sum is x^j < 1/2^j, so we need at most prec steps. 
+	Of course, we can do better, but this is a first approximation.
+*/
+	jmax = prec;
+	printf("jmax = %d\n",jmax);	
+	for ( j=1; j<=jmax; j++ ) {
+		mpf_pow_ui(jm,arg,j);
+		mpf_set_ui(jjm,j);
+		mpf_pow_ui(jjm,jjm,weight);
+		mpf_div(jm,jm,jjm);
+		mpf_add(sum,sum,jm);
+	}
+	mpf_set(result,sum);
+	retval = 0;
+End:
+	mpf_clear(absarg); mpf_clear(sum); mpf_clear(jm); mpf_clear(jjm);
+	return(retval);
+}
+
+/*
+ 		#] CalculateLin :
  		#[ EvaluateLin :
 */
 int EvaluateLin(PHEAD WORD *term, WORD level, WORD par)
@@ -2453,7 +2531,7 @@ int EvaluateLin(PHEAD WORD *term, WORD level, WORD par)
 	int retval;
 
 	DUMMYUSE(par);
-	
+
 	tstop = term + *term; tstop -= ABS(tstop[-1]);
 	if ( AT.WorkPointer < term+*term ) AT.WorkPointer = term + *term;
 
@@ -2473,13 +2551,13 @@ int EvaluateLin(PHEAD WORD *term, WORD level, WORD par)
 /*
 	Step 2: evaluate
 */
-			/* Here comes a call to CalculateLin */
 			if ( first ) {
-				mpf_mul_ui(aux4,aux1, 1);
+				if (CalculateLin(aux4,weight,aux1) != 0) goto nextfun;
 				first = 0;
 			}
 			else {
-				mpf_mul(aux4,aux4,aux1);
+				if (CalculateLin(aux5,weight,aux1) != 0) goto nextfun;
+				mpf_mul(aux4,aux4,aux5);
 			}
 			*t = 0;
 		}
