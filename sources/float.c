@@ -76,6 +76,7 @@ int ExpandEuler(WORD *term, WORD level);
 int PackFloat(WORD *,mpf_t);
 int UnpackFloat(mpf_t, WORD *);
 void RatToFloat(mpf_t result, UWORD *formrat, int ratsize);
+int CalculateLin(mpf_t result, int weight, mpf_t arg);
  
 /*
   	#] Includes : 
@@ -2444,13 +2445,70 @@ int GetLinArgument(int *weight, mpf_t f_out, WORD *fun) {
 }
 /*
  		#] GetLinArgument :
+ 		#[ CalculateNielsen :
+
+		Evaluation of the Nielsen polylogarithm:
+			S_(n,p,x) = sum_(j1,1,inf, x^j1/(j1^(n+1)))*sum_(j2,1,j1-1,1/j2*...*sum_(jp,1,j{p-1}-1,1/jp);
+		For now, this is a helper function to calculate the polylogarithm lin_(n,x) and we may assume 
+		that -1/2 < x < 1/2, so we have good convergence for the sums.
+*/
+void CalculateNielsen(mpf_t result, int n, int p, mpf_t arg) {
+	GETIDENTITY
+	int j,jmax,d;
+	long prec = AC.DefaultPrecision;
+	mpf_t jm,jjm;
+	mpf_init(jm); mpf_init(jjm);
+	mpf_t *mpftab3;
+
+	if ( p <= 0 || n <= 0) {
+		printf("Illigal index of Nielsen polylogarithms.\n");
+		exit(-1);
+	}
+	if ( p == 1 ) CalculateLin(result, n+1,arg);
+/*
+	We run the sums backwards such that we can start with the outer most sum
+*/
+	else {
+		/* We can make a better estimate for jmax, but this is a first approximation */
+		jmax = prec-AC.MaxWeight+n+p+1;
+		mpf_set_si(auxsum,0L);
+		for ( j = jmax; j > 0; j-- ) {
+			mpf_set_ui(jm,1L);
+			mpf_div_ui(jm,jm,(unsigned long)j);
+			mpf_pow_ui(jm,jm,n+1);
+			mpf_pow_ui(jjm,arg,(unsigned long)j);
+			mpf_mul(jjm,jm,jjm);
+			mpf_add(auxsum,auxsum,jjm);
+/*
+		And now copy auxsum to tablelement j
+*/
+			mpf_set(mpftab1[j],auxsum);
+		}
+		mpf_clear(jm); mpf_clear(jjm);
+/*
+		Next, we have to run the inner sums backwards.
+*/
+		jmax--;
+		d = p-2;
+		while ( d > 0 ) {
+			DoubleTable(mpftab2,mpftab1,jmax,1,0);
+			mpftab3 = (mpf_t *)AT.mpf_tab1; 
+			AT.mpf_tab1 = AT.mpf_tab2;
+			AT.mpf_tab2 = (void *)mpftab3;
+			d--; jmax--;
+		}
+		EndTable(result,mpftab1,jmax,1,0);
+	}
+}
+/*
+ 		#] CalculateNielsen :
  		#[ CalculateLin :
 */
 int CalculateLin(mpf_t result, int weight, mpf_t arg) {
 	int j,jmax,w,retval;
 	long prec = AC.DefaultPrecision;
-	mpf_t absarg,sum,jm,jjm;
-	mpf_init(absarg); mpf_init(sum); mpf_init(jm); mpf_init(jjm);  
+	mpf_t absarg,arg2,sum,jm,jjm;
+	mpf_init(absarg); mpf_init(arg2); mpf_init(sum); mpf_init(jm); mpf_init(jjm);  
 
 /*
 	We only consider -1 <= arg <= 1:
@@ -2484,8 +2542,10 @@ int CalculateLin(mpf_t result, int weight, mpf_t arg) {
 	with S_(n,p,x) the Nielsen polylogarithm.
 */
 	if ( mpf_cmp_d(arg,(double)0.5) > 0 ) {
-		/* Here comes the above transformation, for now we just evaluate the naive sum. */
-		goto NaiveSum;
+		mpf_ui_sub(arg2,(unsigned long)1,arg);
+		CalculateNielsen(result,3,4,arg2);
+		retval = 0;
+		goto End;
 	}
 /*
 	For -1 < x < -1/2, we can use the Bernoulli substitution:
@@ -2501,7 +2561,7 @@ int CalculateLin(mpf_t result, int weight, mpf_t arg) {
 	}
 NaiveSum:
 /*
-	The bounds on the terms of the sum is x^j < 1/2^j, so we need at most prec steps. 
+	The bounds on the terms of the sum is |x|^j < 1/2^j, so we need at most prec steps. 
 	Of course, we can do better, but this is a first approximation.
 */
 	jmax = prec;
