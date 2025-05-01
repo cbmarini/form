@@ -88,6 +88,11 @@ SRCBASE += \
 	float.c
 endif
 
+if WITHGINAC
+SRCBASE += \
+	ginacwrap.cc
+endif
+
 SRCPTHREAD = \
 	threads.c
 
