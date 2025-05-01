@@ -408,6 +408,19 @@ AS_IF([test "x$with_zlib" != xno],
 		AC_MSG_NOTICE([zlib is not available])
 		with_zlib=no])])
 
+# Check for ginac
+AC_ARG_WITH([ginac],
+  AS_HELP_STRING([--with-ginac], [use GiNaC for (multiple) polylog evaluation]),
+  [with_ginac=$withval],
+  [with_ginac=check])
+AS_IF([test "x$with_ginac" != xno],
+	[PKG_CHECK_MODULES([GINAC], [ginac >= 1.6],
+		[AC_DEFINE([WITHGINAC], [], [Define to use GiNaC for (multiple) polylog evaluation.])
+		with_ginac=yes],
+    	[with_ginac=no])],
+	[with_ginac=no])
+AM_CONDITIONAL([WITHGINAC], [test "x$with_ginac" = "xyes"])
+
 # Check for zstd
 AC_ARG_WITH([zstd],
 	[AS_HELP_STRING([--with-zstd@<:@=DIR@:>@],
@@ -1146,6 +1159,10 @@ if test "x$with_mpfr" = xyes; then
 fi
 if test "x$with_zlib" = xyes; then
 	echo "    zlib"
+	atleastone=yes
+fi
+if test "x$with_ginac" = xyes; then
+	echo "    ginac"
 	atleastone=yes
 fi
 if test "x$with_zstd" = xyes; then

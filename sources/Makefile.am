@@ -90,6 +90,11 @@ SRCBASE += \
 	float.c
 endif
 
+if WITHGINAC
+SRCBASE += \
+	ginacwrap.cc
+endif
+
 if WITHZSTD
 SRCBASE += \
 	../extern/zstd/zlibWrapper/gzclose.c \

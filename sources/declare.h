@@ -1760,6 +1760,9 @@ SBYTE *ReadFloat(SBYTE *);
 UBYTE *CheckFloat(UBYTE *,int *);
 void SetfFloatPrecision(LONG);
 int EvaluateFun(PHEAD WORD *, WORD, WORD *);
+#ifdef WITHGINAC
+int EvaluateLin(PHEAD WORD *, WORD, WORD);
+#endif
 #endif
 
 /*
