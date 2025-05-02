@@ -3958,8 +3958,10 @@ CommonEnd:
 						if ( EvaluateEuler(BHEAD term,level,C->lhs[level][2]) ) goto GenCall;
 					}
 					#ifdef WITHGINAC
-					else if ( C->lhs[level][2] == LINFUNCTION ) {
-						if ( EvaluateLin(BHEAD term, level,C->lhs[level][2]) ) goto GenCall;
+					else if ( C->lhs[level][2] == LINFUNCTION 
+							  || C->lhs[level][2] == HPLFUNCTION
+							  || C->lhs[level][2] == ALLPOLYLOGFUNCTIONS) {
+						if ( EvaluatePolylog(BHEAD term, level,C->lhs[level][2]) ) goto GenCall;
 					}
 					#endif
 					else {

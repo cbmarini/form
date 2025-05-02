@@ -180,25 +180,24 @@ int CalculateHpl(mpf_t result, int *indexes, int depth, mpf_t arg) {
 }
 /*
   	#] CalculateHpl :
-  	#[ EvaulatueLin : 
+  	#[ EvaluatePolylog : 
 */
 
-int EvaluateLin(PHEAD WORD *term, WORD level, WORD par) {
+int EvaluatePolylog(PHEAD WORD *term, WORD level, WORD par) {
 	WORD *t, *tstop, *tt, *newterm, i, depth, first = 1;
 	WORD *oldworkpointer = AT.WorkPointer, nsize, *indexes;
 	int retval;
-
-	DUMMYUSE(par);
 
 	tstop = term + *term; tstop -= ABS(tstop[-1]);
 	if ( AT.WorkPointer < term+*term ) AT.WorkPointer = term + *term;
 
 /*
-	Step 1: locate a LINFUNCTION
+	Step 1: locate a LINFUNCTION or HPLFUNCTION
 */
 	t = term+1;
 	while ( t < tstop ) {
-		if ( *t == LINFUNCTION || *t == HPLFUNCTION) {
+		if ( (*t == par) || ( ( par == ALLPOLYLOGFUNCTIONS ) && 
+				( *t == LINFUNCTION || *t == HPLFUNCTION ) ) ) {
 			indexes = AT.WorkPointer;
 			if (GetLinArgument(indexes,&depth,aux1,t) != 0) {
 				MesPrint("Error: LINFUNCTION with illegal argument(s)");
@@ -221,7 +220,6 @@ int EvaluateLin(PHEAD WORD *term, WORD level, WORD par) {
 					if (CalculateLin(aux5,indexes[0],aux1) != 0) goto nextfun;
 				}
 				else if ( *t == HPLFUNCTION ) {
-					/* HPL is not implemented yet */
 					if (CalculateHpl(aux5,indexes,depth,aux1) != 0) goto nextfun;
 				}
 				mpf_mul(aux4,aux4,aux5);
@@ -289,5 +287,5 @@ nextfun:
 	return(retval);
 }
 /*
-  	#] EvaluateLin :
+  	#] EvaluatePolylog :
 */

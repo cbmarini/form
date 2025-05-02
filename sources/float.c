@@ -2418,7 +2418,7 @@ int CoEvaluate(UBYTE *s)
 */
 		Add3Com(TYPEEVALUATE,ALLMZVFUNCTIONS);
 		#ifdef WITHGINAC
-		Add3Com(TYPEEVALUATE,LINFUNCTION);
+		Add3Com(TYPEEVALUATE,ALLPOLYLOGFUNCTIONS);
 		#endif
 		return(0);	
 	}
@@ -2451,6 +2451,7 @@ int CoEvaluate(UBYTE *s)
 			case SQRTFUNCTION:
 			#ifdef WITHGINAC
 			case LINFUNCTION:
+			case HPLFUNCTION:
 			#endif
 /*
 			The following functions are treated in evaluate.c

@@ -497,6 +497,7 @@ typedef int (*TFUN1)();
 
 #define ALLFUNCTIONS -1
 #define ALLMZVFUNCTIONS -2
+#define ALLPOLYLOGFUNCTIONS -3
 
 /*
 	Note: if we add a builtin table we have to look also inside names.c
