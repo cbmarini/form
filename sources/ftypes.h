@@ -483,8 +483,12 @@ typedef int (*TFUN1)();
 #define MZVHALF 121
 #define AGMFUNCTION 122
 #define GAMMAFUN 123
+#ifdef WITHGINAC
 #define HPLFUNCTION 124
 #define MAXBUILTINFUNCTION 124
+#else
+#define MAXBUILTINFUNCTION 123
+#endif
 #else
 #define MAXBUILTINFUNCTION 115
 #endif

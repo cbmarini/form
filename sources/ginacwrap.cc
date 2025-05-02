@@ -79,16 +79,31 @@ int CalculateLin(mpf_t result, int weight, mpf_t arg) {
 /*
 	Form measures precision in bits, GiNaC in decimal digits
 */
-	int numdigits = (AC.DefaultPrecision-AC.MaxWeight-1)*log10(2.0);
+	int numdigits = (AC.DefaultPrecision-AC.MaxWeight)*log10(2.0);
 	GiNaC::Digits = numdigits;
 /*
-	We only consider -1 <= arg <= 1:
+	We only consider -1 <= arg <= 1
+	This can be changed later, but for now we don't burn ourselves 
+	by picking a branch.
 */
 	if ( (mpf_cmp_ui(arg,1L) > 0) || (mpf_cmp_si(arg,-1L) < 0) ) {
-		return(1);
+		return(-1);
+	}
+/*
+	In principle this is well defined, so we can always implement this case. 
+*/
+	if ( weight < 1 ) {
+		return(-1);
+	}
+/*
+	Divergent case:	
+*/
+	if ( (weight == 1) && (mpf_cmp_ui(arg,1L) == 0) ) {
+		return(-1);
 	}
 /*
 	Convert to ginac numeric and evaluate
+	Note: GiNaC evaluates lin_(1,-1) = 0????
 */
 	gmp_asprintf(&str, "%.Ff", arg);
     argg = GiNaC::numeric(str);
@@ -103,6 +118,68 @@ int CalculateLin(mpf_t result, int weight, mpf_t arg) {
 }
 /*
   	#] CalculateLin :
+  	#[ CalculateHpl :
+*/
+int CalculateHpl(mpf_t result, int *indexes, int depth, mpf_t arg) {
+	int i;
+	GiNaC::lst indexesg;
+	char *str = nullptr;
+	GiNaC::numeric argg;
+	GiNaC::ex resultg;
+	ostringstream oss;
+/*
+	Form measures precision in bits, GiNaC in decimal digits
+*/
+	int numdigits = (AC.DefaultPrecision-AC.MaxWeight)*log10(2.0);
+	GiNaC::Digits = numdigits;
+/*
+	We only consider -1 <= arg <= 1
+	This can be changed later, but for now we don't burn ourselves 
+	by picking a branch.
+*/
+	if ( (mpf_cmp_ui(arg,1L) > 0) || (mpf_cmp_si(arg,-1L) < 0) ) {
+		return(-1);
+	}
+/*
+	Trailing zeroes lead to factors of hpl_(0;x) = ln_(x)
+	So we only consider x > 0 in this case
+*/
+	if ( (indexes[depth-1] == 0) && (mpf_cmp_ui(arg,0L) <= 0) ) {
+		return(-1);
+	}
+/*
+	Leading ones lead to factors of hpl_(1;x) = ln_(1-x)
+	So we only consider x < 1 in this case
+*/
+	if ( (indexes[0] == 1) && (mpf_cmp_ui(arg,1L) >= 0) ) {
+		return(-1);
+	}
+/*
+	Place the indexes in a ginac list
+*/
+	for( i=0; i < depth; i++ ) {
+		indexesg.append(indexes[i]);
+	}
+/*
+	Convert to ginac numeric and evaluate
+*/
+	gmp_asprintf(&str, "%.Ff", arg);
+    argg = GiNaC::numeric(str);
+	free(str);
+	resultg = GiNaC::evalf(GiNaC::H(indexesg, argg));
+/*
+	Sometimes GiNaC returns a small complex number, even if the result is real.
+*/
+	resultg = GiNaC::real_part(resultg);
+/*
+	Convert back to mpf_t
+*/
+	oss << resultg;
+	mpf_set_str(result, oss.str().c_str(), 10);
+	return(0);
+}
+/*
+  	#] CalculateHpl :
   	#[ EvaulatueLin : 
 */
 
@@ -121,7 +198,7 @@ int EvaluateLin(PHEAD WORD *term, WORD level, WORD par) {
 */
 	t = term+1;
 	while ( t < tstop ) {
-		if ( *t == LINFUNCTION ) {
+		if ( *t == LINFUNCTION || *t == HPLFUNCTION) {
 			indexes = AT.WorkPointer;
 			if (GetLinArgument(indexes,&depth,aux1,t) != 0) {
 				MesPrint("Error: LINFUNCTION with illegal argument(s)");
@@ -131,11 +208,22 @@ int EvaluateLin(PHEAD WORD *term, WORD level, WORD par) {
 	Step 2: evaluate
 */
 			if ( first ) {
-				if (CalculateLin(aux4,indexes[0],aux1) != 0) goto nextfun;
+				if ( *t == LINFUNCTION ) {
+					if (CalculateLin(aux4,indexes[0],aux1) != 0) goto nextfun;
+				}
+				else if ( *t == HPLFUNCTION ) {
+					if (CalculateHpl(aux4,indexes,depth,aux1) != 0) goto nextfun;
+				}
 				first = 0;
 			}
 			else {
-				if (CalculateLin(aux5,indexes[0],aux1) != 0) goto nextfun;
+				if ( *t == LINFUNCTION ) {
+					if (CalculateLin(aux5,indexes[0],aux1) != 0) goto nextfun;
+				}
+				else if ( *t == HPLFUNCTION ) {
+					/* HPL is not implemented yet */
+					if (CalculateHpl(aux5,indexes,depth,aux1) != 0) goto nextfun;
+				}
 				mpf_mul(aux4,aux4,aux5);
 			}
 			*t = 0;
