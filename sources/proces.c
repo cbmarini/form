@@ -3957,9 +3957,11 @@ CommonEnd:
 						 ) {
 						if ( EvaluateEuler(BHEAD term,level,C->lhs[level][2]) ) goto GenCall;
 					}
+					#ifdef WITHGINAC
 					else if ( C->lhs[level][2] == LINFUNCTION ) {
 						if ( EvaluateLin(BHEAD term, level,C->lhs[level][2]) ) goto GenCall;
 					}
+					#endif
 					else {
 						if ( EvaluateFun(BHEAD term,level,C->lhs[level]) ) goto GenCall;
 					}

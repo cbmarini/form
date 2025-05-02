@@ -19,27 +19,32 @@ extern "C" {
   	#] Includes :
   	#[ GetLinArgument :
 */
-int GetLinArgument(int *weight, mpf_t f_out, WORD *fun) {
-	WORD *t, *tn, *tstop, *term, *arg, *argn, ncoef;
+int GetLinArgument(int *indexes, int *depth, mpf_t f_out, WORD *fun) {
+	WORD *t, *tn, *tstop, *term, *arg, *argn, nargs, i;
 	arg = fun + FUNHEAD;
-/* Check that lin_ has two arguments*/
-	argn = arg; ncoef = 0;
+
+	argn = arg; nargs = 0;
 	while ( argn < fun + fun[1] ) {
 		NEXTARG(argn);
-		ncoef++;
+		nargs++;
 	}
-	if ( ncoef != 2) { 
+	if ( nargs < 2 ) { 
+		return(-1); 
+	}
+	/* Check that lin_ has two arguments*/
+	if ( (*fun == LINFUNCTION) && (nargs != 2) ) { 
 		return(-1); 
 	}	
 
-/* The first argument should be a small integer */
-	if (*arg != -SNUMBER) { 
-		return(-1); 
+/* The first argument(s) should be small integer(s) */
+	*depth = nargs - 1;
+	for( i = 0; i < *depth; i++ ) {
+		if (*arg != -SNUMBER) { return(-1); }
+		indexes[i] = arg[1];
+		NEXTARG(arg);
 	}
-	*weight = arg[1];
 
-/* The second argument can be a small number, fraction or float */
-	NEXTARG(arg);
+/* The last argument can be a small number, fraction or float */
 	if (*arg == -SNUMBER) { /* small number */
 		mpf_set_si(f_out,arg[1]);
 		return(0);
@@ -51,16 +56,16 @@ int GetLinArgument(int *weight, mpf_t f_out, WORD *fun) {
 	t = term + 1;
 	if ( t == tstop) { /* fraction */
 		RatToFloat(f_out,(UWORD *)t,tn[-1]);
+		return(0);
 	}
 	else if ( *t == FLOATFUN ) { /* float */
 		UnpackFloat(f_out,t);
 		if ( tn[-1] < 0 ) {/* change sign */
 			mpf_neg(f_out,f_out);
 		}
+		return(0);
 	}
 	else { return(-1); }
-
-	return(0);
 }
 /*
   	#] GetLinArgument :
@@ -102,8 +107,8 @@ int CalculateLin(mpf_t result, int weight, mpf_t arg) {
 */
 
 int EvaluateLin(PHEAD WORD *term, WORD level, WORD par) {
-	WORD *t, *tstop, *tt, *newterm, i, weight, first = 1;
-	WORD *oldworkpointer = AT.WorkPointer, nsize;
+	WORD *t, *tstop, *tt, *newterm, i, depth, first = 1;
+	WORD *oldworkpointer = AT.WorkPointer, nsize, *indexes;
 	int retval;
 
 	DUMMYUSE(par);
@@ -117,7 +122,8 @@ int EvaluateLin(PHEAD WORD *term, WORD level, WORD par) {
 	t = term+1;
 	while ( t < tstop ) {
 		if ( *t == LINFUNCTION ) {
-			if (GetLinArgument(&weight,aux1,t) != 0) {
+			indexes = AT.WorkPointer;
+			if (GetLinArgument(indexes,&depth,aux1,t) != 0) {
 				MesPrint("Error: LINFUNCTION with illegal argument(s)");
 				goto nextfun;
 			}
@@ -125,11 +131,11 @@ int EvaluateLin(PHEAD WORD *term, WORD level, WORD par) {
 	Step 2: evaluate
 */
 			if ( first ) {
-				if (CalculateLin(aux4,weight,aux1) != 0) goto nextfun;
+				if (CalculateLin(aux4,indexes[0],aux1) != 0) goto nextfun;
 				first = 0;
 			}
 			else {
-				if (CalculateLin(aux5,weight,aux1) != 0) goto nextfun;
+				if (CalculateLin(aux5,indexes[0],aux1) != 0) goto nextfun;
 				mpf_mul(aux4,aux4,aux5);
 			}
 			*t = 0;

@@ -2417,7 +2417,9 @@ int CoEvaluate(UBYTE *s)
 		The MZV, EULER and MZVHALF are done separately
 */
 		Add3Com(TYPEEVALUATE,ALLMZVFUNCTIONS);
+		#ifdef WITHGINAC
 		Add3Com(TYPEEVALUATE,LINFUNCTION);
+		#endif
 		return(0);	
 	}
 	while ( *s ) {
@@ -2447,7 +2449,9 @@ int CoEvaluate(UBYTE *s)
 			case EULER:
 			case MZVHALF:
 			case SQRTFUNCTION:
+			#ifdef WITHGINAC
 			case LINFUNCTION:
+			#endif
 /*
 			The following functions are treated in evaluate.c
 
