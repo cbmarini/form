@@ -17,6 +17,38 @@ extern "C" {
 }
 /*
   	#] Includes :
+  	#[ ParseArgumentToFloat :
+*/
+int ParseArgumentToFloat(mpf_t f_out, WORD *arg) {
+    WORD *term, *tn, *tstop, *t;
+
+    if (*arg == -SNUMBER) { /* small number */
+		mpf_set_si(f_out,arg[1]);
+		return(0);
+	}
+
+    term = arg + ARGHEAD;
+    tn = term + *term;
+    tstop = tn - ABS(tn[-1]);
+    t = term + 1;
+
+    if ( t == tstop) { /* fraction */
+		RatToFloat(f_out,(UWORD *)t,tn[-1]);
+		return(0);
+	}
+	else if ( *t == FLOATFUN ) { /* float */
+		UnpackFloat(f_out,t);
+		if ( tn[-1] < 0 ) {/* change sign */
+			mpf_neg(f_out,f_out);
+		}
+		return(0);
+	}
+
+    return -1;  // unsupported format
+}
+
+/*
+  	#] ParseArgumentToFloat
   	#[ GetMplArgument :
 */
 int GetMplArgument(int *indexes, int *depth, mpf_t *f_out, WORD *fun) {
@@ -71,26 +103,8 @@ int GetMplArgument(int *indexes, int *depth, mpf_t *f_out, WORD *fun) {
 	arg = arg + FUNHEAD;
 	i = 0;
 	while( arg < argstop ) {
-		if (*arg == -SNUMBER) { /* small number */
-			mpf_set_si(f_out[i],(unsigned long)arg[1]);
-		}
-		else {
-			term = arg + ARGHEAD;
-			tn = term + *term;
-			tstop = tn - ABS(tn[-1]);
-			t = term + 1;
-			if ( t == tstop) { /* fraction */
-				RatToFloat(f_out[i],(UWORD *)t,tn[-1]);
-			}
-			else if ( *t == FLOATFUN ) { /* float */
-				UnpackFloat(f_out[i],t);
-				if ( tn[-1] < 0 ) {/* change sign */
-					mpf_neg(f_out[i],f_out[i]);
-				}
-			}
-			else { 
-				return(-1); 
-			}
+		if ( ParseArgumentToFloat(f_out[i], arg) != 0 ) {
+			return(-1); 
 		}
 		i++; NEXTARG(arg);
 	}
@@ -132,27 +146,10 @@ int GetLinArgument(int *indexes, int *depth, mpf_t *f_out, WORD *fun) {
 	}
 
 /* The last argument can be a small number, fraction or float */
-	if (*arg == -SNUMBER) { /* small number */
-		mpf_set_si(*f_out,arg[1]);
-		return(0);
+	if (ParseArgumentToFloat(f_out[0], arg) != 0) {
+		return(-1);
 	}
-
-	term = arg + ARGHEAD;
-	tn = term + *term;
-	tstop = tn - ABS(tn[-1]);
-	t = term + 1;
-	if ( t == tstop) { /* fraction */
-		RatToFloat(*f_out,(UWORD *)t,tn[-1]);
-		return(0);
-	}
-	else if ( *t == FLOATFUN ) { /* float */
-		UnpackFloat(*f_out,t);
-		if ( tn[-1] < 0 ) {/* change sign */
-			mpf_neg(*f_out,*f_out);
-		}
-		return(0);
-	}
-	else { return(-1); }
+	return(0);
 }
 /*
   	#] GetLinArgument :
