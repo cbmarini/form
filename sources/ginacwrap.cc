@@ -20,54 +20,83 @@ extern "C" {
   	#[ GetMplArgument :
 */
 int GetMplArgument(int *indexes, int *depth, mpf_t *f_out, WORD *fun) {
-	WORD *arg, *argn, *term, *tn, *tstop, *t, i;
-	// Get indexes from the first argument
+	WORD *arg, *argnext, *argstop, *term, *tn, *tstop, *t, i;
+/* 
+	Get indexes from the first argument
+*/
 	arg = fun + FUNHEAD;
-	arg = arg + ARGHEAD;
-	arg = arg + 1;
-	if ( *arg != LSTFUNCTION ) { 
+	// Check that the argument is not a fast argument
+	if ( *arg < 0 ) { 
 		return(-1); 
 	}
-	argn = arg + arg[1];
+	argnext = arg+*arg;
+	argstop = argnext - ABS(argnext[-1]);
+	// Check that the argument is a lst_ function that is properly normalized
+	if ( (argnext[-3] != 1) || (argnext[-2] != 1) || (argnext[-1] != 3) ) { 
+		return(-1); 
+	}
+	arg = arg + ARGHEAD; arg = arg + 1;
+	if ( *arg != LSTFUNCTION || (arg+arg[1]) != argstop ) { 
+		return(-1); 
+	}
+	// We can now read the indexes
 	arg = arg + FUNHEAD;
 	*depth = 0;
-	while ( arg < argn ) {
+	while ( arg < argstop ) {
 		if ( *arg != -SNUMBER ) return(-1); 
 		indexes[*depth] = arg[1];
 		(*depth)++;
 		NEXTARG(arg);
 	}
-	// Get the arguments from the second argument
+/* 
+	Get the arguments from the second argument
+*/
 	arg = fun + FUNHEAD;
 	NEXTARG(arg);
-	arg = arg + ARGHEAD;
-	arg = arg + 1;
-	if ( *arg != LSTFUNCTION ) { 
+	// Check that the argument is not a fast argument
+	if ( *arg < 0 ) { 
 		return(-1); 
 	}
-	argn = arg + arg[1];
+	argnext = arg+*arg;
+	argstop = argnext - ABS(argnext[-1]);
+	// Check that the argument is a lst_ function that is properly normalized
+	if ( (argnext[-3] != 1) || (argnext[-2] != 1) || (argnext[-1] != 3) ) { 
+		return(-1); 
+	}
+	arg = arg + ARGHEAD; arg = arg + 1;
+	if ( *arg != LSTFUNCTION || (arg+arg[1]) != argstop ) { 
+		return(-1); 
+	}
+	// We can now read the arguments
 	arg = arg + FUNHEAD;
-	for( i=0; i < *depth; i++ ) {
+	i = 0;
+	while( arg < argstop ) {
 		if (*arg == -SNUMBER) { /* small number */
 			mpf_set_si(f_out[i],(unsigned long)arg[1]);
 		}
-		term = arg + ARGHEAD;
-		tn = term + *term;
-		tstop = tn - ABS(tn[-1]);
-		t = term + 1;
-		if ( t == tstop) { /* fraction */
-			RatToFloat(f_out[i],(UWORD *)t,tn[-1]);
-		}
-		else if ( *t == FLOATFUN ) { /* float */
-			UnpackFloat(f_out[i],t);
-			if ( tn[-1] < 0 ) {/* change sign */
-				mpf_neg(f_out[i],f_out[i]);
+		else {
+			term = arg + ARGHEAD;
+			tn = term + *term;
+			tstop = tn - ABS(tn[-1]);
+			t = term + 1;
+			if ( t == tstop) { /* fraction */
+				RatToFloat(f_out[i],(UWORD *)t,tn[-1]);
+			}
+			else if ( *t == FLOATFUN ) { /* float */
+				UnpackFloat(f_out[i],t);
+				if ( tn[-1] < 0 ) {/* change sign */
+					mpf_neg(f_out[i],f_out[i]);
+				}
+			}
+			else { 
+				return(-1); 
 			}
 		}
-		else { 
-			return(-1); 
-		}
-		NEXTARG(arg);
+		i++; NEXTARG(arg);
+	}
+	// Check that we have the right number of arguments
+	if ( i != *depth ) { 
+		return(-1); 
 	}
 	return(0);
 }
@@ -281,7 +310,7 @@ int EvaluatePolylog(PHEAD WORD *term, WORD level, WORD par) {
 	if ( AT.WorkPointer < term+*term ) AT.WorkPointer = term + *term;
 
 /*
-	Step 1: locate a LINFUNCTION or HPLFUNCTION
+	Step 1: locate a LINFUNCTION, HPLFUNCTION or MPLFUNCTION
 */
 	t = term+1;
 	while ( t < tstop ) {
