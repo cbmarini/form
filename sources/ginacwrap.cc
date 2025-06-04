@@ -17,9 +17,65 @@ extern "C" {
 }
 /*
   	#] Includes :
+  	#[ GetMplArgument :
+*/
+int GetMplArgument(int *indexes, int *depth, mpf_t *f_out, WORD *fun) {
+	WORD *arg, *argn, *term, *tn, *tstop, *t, i;
+	// Get indexes from the first argument
+	arg = fun + FUNHEAD;
+	arg = arg + ARGHEAD;
+	arg = arg + 1;
+	if ( *arg != LSTFUNCTION ) { 
+		return(-1); 
+	}
+	argn = arg + arg[1];
+	arg = arg + FUNHEAD;
+	*depth = 0;
+	while ( arg < argn ) {
+		if ( *arg != -SNUMBER ) return(-1); 
+		indexes[*depth] = arg[1];
+		(*depth)++;
+		NEXTARG(arg);
+	}
+	// Get the arguments from the second argument
+	arg = fun + FUNHEAD;
+	NEXTARG(arg);
+	arg = arg + ARGHEAD;
+	arg = arg + 1;
+	if ( *arg != LSTFUNCTION ) { 
+		return(-1); 
+	}
+	argn = arg + arg[1];
+	arg = arg + FUNHEAD;
+	for( i=0; i < *depth; i++ ) {
+		if (*arg == -SNUMBER) { /* small number */
+			mpf_set_si(f_out[i],(unsigned long)arg[1]);
+		}
+		term = arg + ARGHEAD;
+		tn = term + *term;
+		tstop = tn - ABS(tn[-1]);
+		t = term + 1;
+		if ( t == tstop) { /* fraction */
+			RatToFloat(f_out[i],(UWORD *)t,tn[-1]);
+		}
+		else if ( *t == FLOATFUN ) { /* float */
+			UnpackFloat(f_out[i],t);
+			if ( tn[-1] < 0 ) {/* change sign */
+				mpf_neg(f_out[i],f_out[i]);
+			}
+		}
+		else { 
+			return(-1); 
+		}
+		NEXTARG(arg);
+	}
+	return(0);
+}
+/*
+  	#] GetMplArgument :
   	#[ GetLinArgument :
 */
-int GetLinArgument(int *indexes, int *depth, mpf_t f_out, WORD *fun) {
+int GetLinArgument(int *indexes, int *depth, mpf_t *f_out, WORD *fun) {
 	WORD *t, *tn, *tstop, *term, *arg, *argn, nargs, i;
 	arg = fun + FUNHEAD;
 
@@ -32,10 +88,12 @@ int GetLinArgument(int *indexes, int *depth, mpf_t f_out, WORD *fun) {
 		return(-1); 
 	}
 	/* Check that lin_ has two arguments*/
-	if ( (*fun == LINFUNCTION) && (nargs != 2) ) { 
+	if ( (*fun == LINFUNCTION || *fun == MPLFUNCTION) && (nargs != 2) ) { 
 		return(-1); 
 	}	
-
+	if ( *fun == MPLFUNCTION ) {
+		return(GetMplArgument(indexes, depth, f_out, fun));
+	}
 /* The first argument(s) should be small integer(s) */
 	*depth = nargs - 1;
 	for( i = 0; i < *depth; i++ ) {
@@ -46,7 +104,7 @@ int GetLinArgument(int *indexes, int *depth, mpf_t f_out, WORD *fun) {
 
 /* The last argument can be a small number, fraction or float */
 	if (*arg == -SNUMBER) { /* small number */
-		mpf_set_si(f_out,arg[1]);
+		mpf_set_si(*f_out,arg[1]);
 		return(0);
 	}
 
@@ -55,13 +113,13 @@ int GetLinArgument(int *indexes, int *depth, mpf_t f_out, WORD *fun) {
 	tstop = tn - ABS(tn[-1]);
 	t = term + 1;
 	if ( t == tstop) { /* fraction */
-		RatToFloat(f_out,(UWORD *)t,tn[-1]);
+		RatToFloat(*f_out,(UWORD *)t,tn[-1]);
 		return(0);
 	}
 	else if ( *t == FLOATFUN ) { /* float */
-		UnpackFloat(f_out,t);
+		UnpackFloat(*f_out,t);
 		if ( tn[-1] < 0 ) {/* change sign */
-			mpf_neg(f_out,f_out);
+			mpf_neg(*f_out,*f_out);
 		}
 		return(0);
 	}
@@ -168,6 +226,47 @@ int CalculateHpl(mpf_t resultRe, mpf_t resultIm, int *indexes, int depth, mpf_t 
 }
 /*
   	#] CalculateHpl :
+  	#[ CalculateMpl :
+*/
+int CalculateMpl(mpf_t resultRe, mpf_t resultIm, int *indexes, int depth, mpf_t *arg) {
+	int i;
+	GiNaC::lst indexesg,argListg;
+	char *str = nullptr;
+	GiNaC::numeric argg;
+	GiNaC::ex resultg,resultgRe, resultgIm;
+	ostringstream oss,oss2;
+/*
+	Form measures precision in bits, GiNaC in decimal digits
+*/
+	int numdigits = (AC.DefaultPrecision-AC.MaxWeight)*log10(2.0);
+	GiNaC::Digits = numdigits;
+/*
+	Place the indexes and arguments in a ginac list
+*/
+	for( i=0; i < depth; i++ ) {
+		indexesg.append(indexes[i]);
+		gmp_asprintf(&str, "%.Ff", arg[i]);
+    	argg = GiNaC::numeric(str);
+		free(str);
+		argListg.append(argg);
+	}
+/*
+	Convert to ginac numeric and evaluate
+*/
+	resultg = GiNaC::evalf(GiNaC::Li(indexesg, argListg));
+	resultgRe = GiNaC::real_part(resultg);
+	resultgIm = GiNaC::imag_part(resultg);
+/*
+	Convert back to mpf_t
+*/
+	oss << resultgRe;
+	mpf_set_str(resultRe, oss.str().c_str(), 10);
+	oss2 << resultgIm;
+	mpf_set_str(resultIm, oss2.str().c_str(), 10);
+	return(0);
+}
+/*
+  	#] CalculateMpl :
   	#[ EvaluatePolylog : 
 */
 
@@ -187,9 +286,9 @@ int EvaluatePolylog(PHEAD WORD *term, WORD level, WORD par) {
 	t = term+1;
 	while ( t < tstop ) {
 		if ( (*t == par) || ( ( par == ALLPOLYLOGFUNCTIONS ) && 
-				( *t == LINFUNCTION || *t == HPLFUNCTION ) ) ) {
+				( *t == LINFUNCTION || *t == HPLFUNCTION || *t == MPLFUNCTION ) ) ) {
 			indexes = AT.WorkPointer;
-			if (GetLinArgument(indexes,&depth,aux1,t) != 0) {
+			if (GetLinArgument(indexes,&depth,mpftab1,t) != 0) {
 				MesPrint("Error: LINFUNCTION with illegal argument(s)");
 				goto nextfun;
 			}
@@ -199,19 +298,25 @@ int EvaluatePolylog(PHEAD WORD *term, WORD level, WORD par) {
 */
 			if ( first ) {
 				if ( *t == LINFUNCTION ) {
-					if (CalculateLin(aux2,aux3,indexes[0],aux1) != 0) goto nextfun;
+					if (CalculateLin(aux2,aux3,indexes[0],*mpftab1) != 0) goto nextfun;
 				}
 				else if ( *t == HPLFUNCTION ) {
-					if (CalculateHpl(aux2,aux3,indexes,depth,aux1) != 0) goto nextfun;
+					if (CalculateHpl(aux2,aux3,indexes,depth,*mpftab1) != 0) goto nextfun;
+				}
+				else if ( *t == MPLFUNCTION ) {
+					if (CalculateMpl(aux2,aux3,indexes,depth,mpftab1) != 0) goto nextfun;
 				}
 				first = 0;
 			}
 			else {
 				if ( *t == LINFUNCTION ) {
-					if (CalculateLin(aux4,aux5,indexes[0],aux1) != 0) goto nextfun;
+					if (CalculateLin(aux4,aux5,indexes[0],*mpftab1) != 0) goto nextfun;
 				}
 				else if ( *t == HPLFUNCTION ) {
-					if (CalculateHpl(aux4,aux5,indexes,depth,aux1) != 0) goto nextfun;
+					if (CalculateHpl(aux4,aux5,indexes,depth,*mpftab1) != 0) goto nextfun;
+				}
+				else if ( *t == MPLFUNCTION ) {
+					if (CalculateMpl(aux4,aux5,indexes,depth,mpftab1) != 0) goto nextfun;
 				}
 /*
 	We multiply two complex numbers:

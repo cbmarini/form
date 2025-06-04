@@ -2452,6 +2452,7 @@ int CoEvaluate(UBYTE *s)
 			#ifdef WITHGINAC
 			case LINFUNCTION:
 			case HPLFUNCTION:
+			case MPLFUNCTION:
 			#endif
 /*
 			The following functions are treated in evaluate.c

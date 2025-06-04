@@ -254,6 +254,8 @@ static struct fixedfun {
 	,{"gamma_"      ,0 ,0             ,0               ,0} /* GAMMAFUN */
 #ifdef WITHGINAC
 	,{"hpl_"        ,0 ,0             ,0               ,0} /* HPL */
+	,{"mpl_"        ,0 ,0             ,0               ,0} /* MPL */
+	,{"lst_"        ,0 ,0             ,0               ,0} /* LSTFUNCTION */
 #endif
 #endif
 };
