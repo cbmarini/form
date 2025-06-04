@@ -320,21 +320,9 @@ int EvaluatePolylog(PHEAD WORD *term, WORD level, WORD par) {
 			}
 /*
 	Step 2: evaluate
-	The real part is accumulated in aux2, the imaginary part in aux3.
+	The real part is accumulated in aux4, the imaginary part in aux5.
 */
 			if ( first ) {
-				if ( *t == LINFUNCTION ) {
-					if (CalculateLin(aux2,aux3,indexes[0],*mpftab1) != 0) goto nextfun;
-				}
-				else if ( *t == HPLFUNCTION ) {
-					if (CalculateHpl(aux2,aux3,indexes,depth,*mpftab1) != 0) goto nextfun;
-				}
-				else if ( *t == MPLFUNCTION ) {
-					if (CalculateMpl(aux2,aux3,indexes,depth,mpftab1) != 0) goto nextfun;
-				}
-				first = 0;
-			}
-			else {
 				if ( *t == LINFUNCTION ) {
 					if (CalculateLin(aux4,aux5,indexes[0],*mpftab1) != 0) goto nextfun;
 				}
@@ -344,22 +332,34 @@ int EvaluatePolylog(PHEAD WORD *term, WORD level, WORD par) {
 				else if ( *t == MPLFUNCTION ) {
 					if (CalculateMpl(aux4,aux5,indexes,depth,mpftab1) != 0) goto nextfun;
 				}
+				first = 0;
+			}
+			else {
+				if ( *t == LINFUNCTION ) {
+					if (CalculateLin(auxjm,auxjjm,indexes[0],*mpftab1) != 0) goto nextfun;
+				}
+				else if ( *t == HPLFUNCTION ) {
+					if (CalculateHpl(auxjm,auxjjm,indexes,depth,*mpftab1) != 0) goto nextfun;
+				}
+				else if ( *t == MPLFUNCTION ) {
+					if (CalculateMpl(auxjm,auxjjm,indexes,depth,mpftab1) != 0) goto nextfun;
+				}
 /*
 	We multiply two complex numbers:
-	(aux2+aux3*i_) * (aux4+aux5*i_) 
-			= (aux2*aux4-aux3*aux5) + (aux2*aux5+aux3*aux4)*i_
+	(aux4+aux5*i_) * (auxjm+auxjjm*i_) 
+			= (aux4*auxjm-aux5*auxjjm) + (aux4*auxjjm+aux5*auxjm)*i_
 */
 				// Real part
-				mpf_mul(tmpRe,aux2,aux4);
-				mpf_mul(tmp,aux3,aux5);
+				mpf_mul(tmpRe,aux4,auxjm);
+				mpf_mul(tmp,aux5,auxjjm);
 				mpf_sub(tmpRe,tmpRe,tmp);
 				// Imaginary part
-				mpf_mul(tmpIm,aux2,aux5);
-				mpf_mul(tmp,aux3,aux4);
+				mpf_mul(tmpIm,aux4,auxjjm);
+				mpf_mul(tmp,aux5,auxjm);
 				mpf_add(tmpIm,tmpIm,tmp);
-				// We set the results again in aux2 and aux3
-				mpf_set(aux2,tmpRe);
-				mpf_set(aux3,tmpIm);
+				// We set the results again in aux4 and aux5
+				mpf_set(aux4,tmpRe);
+				mpf_set(aux5,tmpIm);
 			}
 			*t = 0;
 		}
@@ -374,24 +374,24 @@ nextfun:
 */
 	nsize = term[*term-1];
 	if ( nsize < 0 ) {
-		mpf_neg(aux2,aux2);
-		mpf_neg(aux3,aux3);
+		mpf_neg(aux4,aux4);
+		mpf_neg(aux5,aux5);
 		nsize = -nsize;
 	}
 	if ( nsize == 3 ) {
 		if ( tstop[0] != 1 ) {
-			mpf_mul_ui(aux2,aux2,(ULONG)((UWORD)tstop[0]));
-			mpf_mul_ui(aux3,aux3,(ULONG)((UWORD)tstop[0]));
+			mpf_mul_ui(aux4,aux4,(ULONG)((UWORD)tstop[0]));
+			mpf_mul_ui(aux5,aux5,(ULONG)((UWORD)tstop[0]));
 		}
 		if ( tstop[1] != 1 ) {
-			mpf_div_ui(aux2,aux2,(ULONG)((UWORD)tstop[1]));
-			mpf_div_ui(aux3,aux3,(ULONG)((UWORD)tstop[1]));
+			mpf_div_ui(aux4,aux4,(ULONG)((UWORD)tstop[1]));
+			mpf_div_ui(aux5,aux5,(ULONG)((UWORD)tstop[1]));
 		}
 	}
 	else {
-		RatToFloat(aux5,(UWORD *)tstop,nsize);
-		mpf_mul(aux2,aux2,aux5);
-		mpf_mul(aux3,aux3,aux5);
+		RatToFloat(auxjjm,(UWORD *)tstop,nsize);
+		mpf_mul(aux4,aux4,auxjjm);
+		mpf_mul(aux5,aux5,auxjjm);
 	}
 /*
 	Now we have to locate possible other float_ functions.
@@ -399,9 +399,9 @@ nextfun:
 	t = term+1;
 	while ( t < tstop ) {
 		if ( *t == FLOATFUN ) {
-			UnpackFloat(aux5,t);
-			mpf_mul(aux2,aux2,aux5);
-			mpf_mul(aux3,aux3,aux5);
+			UnpackFloat(auxjjm,t);
+			mpf_mul(aux4,aux4,auxjjm);
+			mpf_mul(aux5,aux5,auxjjm);
 		}
 		t += t[1];
 	}
@@ -419,7 +419,7 @@ nextfun:
 			i = t[1]; NCOPY(tt,t,i);
 		}
 	}
-	PackFloat(tt,aux2);
+	PackFloat(tt,aux4);
 	tt += tt[1];
 	*tt++ = 1; *tt++ = 1; *tt++ = 3;
 	*newterm = tt-newterm;
@@ -427,7 +427,7 @@ nextfun:
 	retval = Generator(BHEAD newterm,level);
 
 	// Imaginary part
-	if ( mpf_cmp_ui(aux3,0L) != 0 ) {
+	if ( mpf_cmp_ui(aux5,0L) != 0 ) {
 	t = term+1;
 	newterm = AT.WorkPointer;
 	tt = newterm+1;
@@ -438,7 +438,7 @@ nextfun:
 		}
 	}
 	*tt++ = SYMBOL; *tt++ = 4; *tt++ = ISYMBOL; *tt++ = 1;
-	PackFloat(tt,aux3);
+	PackFloat(tt,aux5);
 	tt += tt[1];
 	*tt++ = 1; *tt++ = 1; *tt++ = 3;
 	*newterm = tt-newterm;
