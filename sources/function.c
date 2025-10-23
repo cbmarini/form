@@ -903,6 +903,10 @@ int MatchFunction(PHEAD WORD *pattern, WORD *interm, WORD *wilds)
 /*
 	Single out the specials
 */
+#ifdef WITHFLOAT
+	/* 	We cannot match to floats */
+	if ( *t == FLOATFUN ) return(0);
+#endif
 	if ( *t == GAMMA ) {
 /*
  		#[ GAMMA :
