@@ -52,15 +52,15 @@ static KEYWORD formatoptions[] = {
 #ifdef WITHFLOAT
 	,{"floatprecision",	(TFUN)0,	0,					5}
 #endif
-#ifdef WITHPADIC
-	,{"padicprecision",	(TFUN)0,	0,					6}
-#endif
 	,{"fortran",		(TFUN)0,	FORTRANMODE,		0}
 	,{"fortran90",		(TFUN)0,	FORTRANMODE,		4}
 	,{"maple",			(TFUN)0,	MAPLEMODE,			0}
 	,{"mathematica",	(TFUN)0,	MATHEMATICAMODE,	0}
 	,{"normal",			(TFUN)0,	NORMALFORMAT,		1}
 	,{"nospaces",		(TFUN)0,	NOSPACEFORMAT,		3}
+#ifdef WITHPADIC
+	,{"padicprecision",	(TFUN)0,	0,					6}
+#endif
 	,{"pfortran",		(TFUN)0,	PFORTRANMODE,		0}
 	,{"quadfortran",	(TFUN)0,	QUADRUPLEFORTRANMODE,	0}
 	,{"quadruplefortran",	(TFUN)0,	QUADRUPLEFORTRANMODE,	0}
