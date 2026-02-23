@@ -705,27 +705,28 @@ int ToPadic(PHEAD WORD *term, WORD level)
 {
 	GETBIDENTITY
 	PADIC_AUX *aux;
-	WORD *t, *tstop, nsize;
+	WORD *t, *scan, *tstop, nsize, ncoef;
 
 	if ( !PadicRuntimeActive ) return(1);
 	aux = GetPadicAux();
 	if ( aux == 0 ) return(1);
 
 	t = term + *term;
-	nsize = ABS(t[-1]);
+	ncoef = t[-1];
+	nsize = ABS(ncoef);
 	tstop = t - nsize;
 
 	if ( nsize == 3 && tstop[0] == 1 && tstop[1] == 1 ) {
-		t = term + 1;
-		while ( t < tstop ) {
-			if ( *t == PADICFUN && t + t[1] == tstop && TestPadic(t) ) {
+		scan = term + 1;
+		while ( scan < tstop ) {
+			if ( *scan == PADICFUN && scan + scan[1] == tstop && TestPadic(scan) ) {
 				return(Generator(BHEAD term,level));
 			}
-			t += t[1];
+			scan += scan[1];
 		}
 	}
 
-	FormRatToMpq(aux->q1,(UWORD *)tstop,(t[-1]));
+	FormRatToMpq(aux->q1,(UWORD *)tstop,ncoef);
 	padic_set_mpq(aux->p1,aux->q1,ActivePadicContext);
 	PackPadic(aux,tstop,aux->p1);
 	tstop += tstop[1];
