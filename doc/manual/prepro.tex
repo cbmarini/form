@@ -978,6 +978,18 @@ do\index{do loop} loop. See the \#do\index{\#do} instruction.
 \noindent See also startfloat (\ref{prestartfloat}) and chapter~\ref{floatingpoint} on the floating point capability.
  
 %--#] endfloat : 
+%--#[ endpadic :
+
+\section{\#endpadic}
+\label{preendpadic}
+
+\noindent Syntax:
+
+\#endpadic
+
+\noindent See also startpadic (\ref{prestartpadic}) and chapter~\ref{floatingpoint} on floating point and p-adic arithmetic.
+ 
+%--#] endpadic : 
 %--#[ endif :
 
 \section{\#endif}
@@ -2015,6 +2027,28 @@ at the end of the current module. In some cases this can significantly reduce
 \noindent See also endfloat (\ref{preendfloat}) and chapter~\ref{floatingpoint} on the floating point capability.
  
 %--#]  startfloat : 
+%--#[ startpadic :
+
+\section{\#startpadic}
+\label{prestartpadic}
+
+\noindent Syntax:
+
+\#startpadic $<$p$>$ [,N=$<$N$>$]
+
+\noindent \FORM{} also accepts:
+\begin{verbatim}
+#startpadic <p>,<N>
+\end{verbatim}
+The parameter \texttt{<p>} must be prime and \texttt{<N>} must be a positive
+integer.
+
+\noindent See also endpadic (\ref{preendpadic}) and chapter~\ref{floatingpoint}
+on floating point and p-adic arithmetic.
+
+\noindent \#startpadic and \#startfloat are mutually exclusive in one run.
+ 
+%--#]  startpadic : 
 %--#[ switch :
 
 \section{\#switch}
@@ -2382,5 +2416,4 @@ construction that might be very useful:
 Currently the syntax does not allow this. This may change in the future.
 
 %--#] Some remarks : 
-
 

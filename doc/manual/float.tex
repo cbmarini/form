@@ -33,6 +33,9 @@ number of auxiliary arrays that depend on this weight. The default weight is zer
 floating point system. Note that if one would like to change the precision during a run, 
 this is now possible with a new \texttt{\#StartFloat} instruction. 
 \end{description}
+The floating point and p-adic systems are mutually exclusive. If p-adics are
+active, \texttt{\#StartFloat} gives an error. Likewise, if floats are active,
+\texttt{\#StartPadic} gives an error.
 Example programs that illustrate the use of these statements and the 
 functionality of \FORM's floating point system are given below. 
 
@@ -80,6 +83,28 @@ The argument environment may be nested.
 Similarly, the statements \texttt{Evaluate}, \texttt{StrictRounding} and \texttt{Chop} act at
 the ground level. To have them act on function argument, one uses the \texttt{Argument} environment.
 These statements are explained further below. 
+
+\section{P-adic coefficients}
+\FORM{} can also work with p-adic coefficients. This functionality uses FLINT
+and follows the same activation model as floating point numbers.
+\begin{description}
+\item[\#StartPadic] Initializes the p-adic system:
+\begin{verbatim}
+    #StartPadic <p>, N=<N>
+\end{verbatim}
+or
+\begin{verbatim}
+    #StartPadic <p>,<N>
+\end{verbatim}
+Here \texttt{<p>} must be a prime and \texttt{<N>} must be a positive integer.
+The active context is global and arithmetic is truncated at $O(p^N)$.
+\item[\#EndPadic] Releases all p-adic resources and disables p-adic arithmetic.
+\item[ToPadic] Converts rational coefficients into p-adic coefficients in the
+currently active context.
+\end{description}
+Like \texttt{ToFloat}, \texttt{ToPadic} operates at ground level, and can be
+applied inside an \texttt{Argument} environment for function arguments.
+No numerical function-evaluation statement is provided for p-adics.
 
 \section{Evaluation of functions and symbols}
 Before version 5.0, \FORM{} already reserved function names for many common mathematical
@@ -186,6 +211,20 @@ If the requested precision exceeds the precision specified by
     Format floatprecision off;
 \end{verbatim}
 the floating point numbers are printed in raw internal format, see also section \ref{sec:float_raw}. 
+\item[Format padicprecision] This instruction controls p-adic printing. It can
+be used as:
+\begin{verbatim}
+    Format padicprecision;
+\end{verbatim}
+for the full active precision $N$,
+\begin{verbatim}
+    Format padicprecision <n>;
+\end{verbatim}
+for output truncated to $\min(n,N)$ digits, and
+\begin{verbatim}
+    Format padicprecision off;
+\end{verbatim}
+for the raw internal \texttt{padic\_(...)} representation.
 \end{description}
 
 \section{Examples}
