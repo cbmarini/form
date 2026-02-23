@@ -57,15 +57,11 @@
 	- precision N
 	The context is configured by #StartPadic / #EndPadic.
 */
-
-static int PadicRuntimeActive = 0;
-static int PadicPrimeInitialized = 0;
-static int PadicContextInitialized = 0;
-static LONG PadicPrime = 0;
-static LONG PadicPrecision = 0;
-
-static fmpz_t PadicPrimeFmpz;
-static padic_ctx_t PadicContext;
+#define PadicRuntimeActive     AM.PadicRuntimeActive
+#define PadicContextInitialized AM.PadicContextInitialized
+#define PadicPrime             AM.PadicPrime
+#define PadicPrecision         AM.PadicPrecision
+#define ActivePadicContext     ((padic_ctx_struct *)(AM.PadicContext))
 
 /*
 	Thread-local aux storage. The pointer is stored in AT.padic_aux_.
@@ -264,55 +260,108 @@ static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
 	mpz_clear(znum);
 }
 
-/*
-	Converts packed limb arguments of the form (-SNUMBER, value) repeated
-	`nlimbs` times into an mpz. `limbs` points to the first -SNUMBER tag.
-*/
-static void PadicLimbsToMpz(mpz_t z, WORD *limbs, WORD nlimbs)
+static WORD *WriteMpzArg(WORD *t, mpz_t z, const char *who)
 {
-	WORD i;
-	mpz_set_ui(z,0UL);
-	for ( i = nlimbs-1; i >= 0; i-- ) {
-		mpz_mul_2exp(z,z,BITSINWORD);
-		mpz_add_ui(z,z,(UWORD)limbs[2*i+1]);
-	}
-}
-
-/*
-	Exports a non-negative mpz into little-endian UWORD limbs.
-*/
-static UWORD *MpzToPadicLimbs(mpz_t z, WORD *nlimbs, const char *who)
-{
+	LONG small;
+	int sign;
+	mpz_t zabs;
 	size_t count = 0;
-	UWORD *out = 0;
-	if ( mpz_sgn(z) == 0 ) {
-		*nlimbs = 0;
-		return(0);
+	UWORD *limbs = 0;
+	WORD nnum, i;
+
+	if ( mpz_fits_slong_p(z) ) {
+		small = (LONG)mpz_get_si(z);
+		if ( small >= WORD_MIN_VALUE && small <= WORD_MAX_VALUE ) {
+			return(WriteSmallArg(t,(WORD)small));
+		}
 	}
-	count = (size_t)((mpz_sizeinbase(z,2) + BITSINWORD - 1) / BITSINWORD);
+
+	sign = mpz_sgn(z);
+	if ( sign == 0 ) return(WriteSmallArg(t,0));
+
+	mpz_init(zabs);
+	mpz_set(zabs,z);
+	if ( sign < 0 ) mpz_neg(zabs,zabs);
+
+	count = (size_t)((mpz_sizeinbase(zabs,2) + BITSINWORD - 1) / BITSINWORD);
 	if ( count > (size_t)WORD_MAX_VALUE ) {
+		mpz_clear(zabs);
 		MLOCK(ErrorMessageLock);
 		MesPrint("p-adic internal overflow in %s.",who);
 		MUNLOCK(ErrorMessageLock);
 		Terminate(-1);
 	}
-	out = (UWORD *)Malloc1(count*sizeof(UWORD),who);
-	if ( out == 0 ) {
+
+	limbs = (UWORD *)Malloc1(count*sizeof(UWORD),who);
+	if ( limbs == 0 ) {
+		mpz_clear(zabs);
 		MLOCK(ErrorMessageLock);
 		MesPrint("Fatal error in Malloc1 call in %s.",who);
 		MUNLOCK(ErrorMessageLock);
 		Terminate(-1);
 	}
-	mpz_export(out,&count,-1,sizeof(UWORD),0,0,z);
-	*nlimbs = (WORD)count;
-	return(out);
+
+	mpz_export(limbs,&count,-1,sizeof(UWORD),0,0,zabs);
+	mpz_clear(zabs);
+	if ( count == 0 ) {
+		M_free(limbs,who);
+		return(WriteSmallArg(t,0));
+	}
+	if ( count > (size_t)WORD_MAX_VALUE ) {
+		M_free(limbs,who);
+		MLOCK(ErrorMessageLock);
+		MesPrint("p-adic internal overflow in %s.",who);
+		MUNLOCK(ErrorMessageLock);
+		Terminate(-1);
+	}
+
+	nnum = (WORD)count;
+	*t++ = ARGHEAD + 2*nnum + 2;
+	*t++ = 0;
+	FILLARG(t);
+	*t++ = 2*nnum + 2;
+	for ( i = 0; i < nnum; i++ ) *t++ = (WORD)limbs[i];
+	*t++ = 1;
+	for ( i = 1; i < nnum; i++ ) *t++ = 0;
+	*t++ = ( sign < 0 ) ? -(2*nnum+1) : (2*nnum+1);
+
+	M_free(limbs,who);
+	return(t);
 }
 
-static void ContextMismatchError(LONG p, LONG N)
+static WORD *ReadMpzArg(WORD *f, WORD *fstop, mpz_t z)
+{
+	WORD nnum, i, signcode;
+	if ( f >= fstop ) return(0);
+
+	if ( *f == -SNUMBER ) {
+		mpz_set_si(z,(slong)(f[1]));
+		return(f+2);
+	}
+
+	if ( *f <= 0 || f + *f > fstop ) return(0);
+	signcode = f[*f-1];
+	if ( signcode == 0 ) return(0);
+	nnum = (WORD)((ABS(signcode)-1)/2);
+	if ( nnum <= 0 ) return(0);
+	if ( ABS(signcode) != 2*nnum + 1 ) return(0);
+	if ( *f != ARGHEAD + 2*nnum + 2 ) return(0);
+	if ( f[ARGHEAD] != 2*nnum + 2 ) return(0);
+	if ( f[ARGHEAD+1+nnum] != 1 ) return(0);
+	for ( i = 1; i < nnum; i++ ) {
+		if ( f[ARGHEAD+1+nnum+i] != 0 ) return(0);
+	}
+
+	mpz_import(z,(size_t)nnum,-1,sizeof(UWORD),0,0,(UWORD *)(f+ARGHEAD+1));
+	if ( signcode < 0 ) mpz_neg(z,z);
+	return(f + *f);
+}
+
+static void ContextMismatchError(LONG N)
 {
 	MLOCK(ErrorMessageLock);
-	MesPrint("Incompatible p-adic context in padic_ coefficient: found p=%l, N=%l, active context uses p=%l, N=%l.",
-		p,N,PadicPrime,PadicPrecision);
+	MesPrint("Incompatible p-adic precision in padic_ coefficient: found N=%l, active context uses p=%l, N=%l.",
+		N,PadicPrime,PadicPrecision);
 	MesPrint("Use %#StartPadic with matching parameters before combining these terms.");
 	MUNLOCK(ErrorMessageLock);
 	Terminate(-1);
@@ -321,20 +370,18 @@ static void ContextMismatchError(LONG p, LONG N)
 /*
 	#[ Internal p-adic function format :
 
-	The internal `padic_` representation stores a context tag and a rational:
+	The internal `padic_` representation stores the FLINT triplet (u,v,N):
 
-	  padic_(p, N, sign, nnum, num_limb_1, ..., num_limb_nnum,
-	             nden, den_limb_1, ..., den_limb_nden)
+	  padic_(v, N, u)
 
-	where the limbs are raw WORD values interpreted as unsigned base 2^BITSINWORD
-	digits in little-endian order.
+	where u is encoded as a normal Form integer argument (either -SNUMBER
+	or a long integer n/1 argument, exactly as in float_ limb packing).
 */
 
 static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 {
 	WORD *f, *fstop;
-	LONG p, N;
-	WORD sign, nnum, nden;
+	LONG v, N;
 
 	if ( !PadicRuntimeActive || !PadicContextInitialized ) {
 		MLOCK(ErrorMessageLock);
@@ -349,82 +396,46 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 	f = fun + FUNHEAD;
 	fstop = fun + fun[1];
 
-	f = ReadLongArg(f,&p);
+	f = ReadLongArg(f,&v);
 	if ( f == 0 ) return(-1);
 	f = ReadLongArg(f,&N);
 	if ( f == 0 ) return(-1);
-	if ( p != PadicPrime || N != PadicPrecision ) {
-		ContextMismatchError(p,N);
+	if ( N != PadicPrecision ) {
+		ContextMismatchError(N);
 		return(-1);
 	}
 
-	sign = f[1];
-	f += 2;
-	nnum = f[1];
-	f += 2;
-
-	PadicLimbsToMpz(aux->z1,f,nnum);
-	if ( sign < 0 ) mpz_neg(aux->z1,aux->z1);
-	f += 2*nnum;
-
-	nden = f[1];
-	f += 2;
-	PadicLimbsToMpz(aux->z2,f,nden);
-	f += 2*nden;
-
+	f = ReadMpzArg(f,fstop,aux->z1);
+	if ( f == 0 ) return(-1);
 	if ( f != fstop ) return(-1);
-	if ( mpz_sgn(aux->z2) <= 0 ) return(-1);
-
-	mpq_set_num(aux->q1,aux->z1);
-	mpq_set_den(aux->q1,aux->z2);
-	mpq_canonicalize(aux->q1);
-	padic_set_mpq(out,aux->q1,PadicContext);
+	fmpz_set_mpz(padic_unit(out),aux->z1);
+	padic_val(out) = (slong)v;
+	padic_prec(out) = (slong)N;
+	padic_reduce(out,ActivePadicContext);
 	return(0);
 }
 
 static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 {
 	WORD *t;
-	WORD sign, nnum, nden, i;
-	UWORD *numlimbs = 0, *denlimbs = 0;
+	LONG v, N;
 
-	padic_get_mpq(aux->q1,in,PadicContext);
-	mpz_set(aux->z1,mpq_numref(aux->q1));
-	mpz_set(aux->z2,mpq_denref(aux->q1));
+	padic_set(aux->p4,in,ActivePadicContext);
+	padic_reduce(aux->p4,ActivePadicContext);
+	v = (LONG)padic_val(aux->p4);
+	N = (LONG)padic_prec(aux->p4);
 
-	sign = (WORD)mpz_sgn(aux->z1);
-	if ( sign < 0 ) mpz_neg(aux->z1,aux->z1);
-
-	numlimbs = MpzToPadicLimbs(aux->z1,&nnum,"PackPadic(num)");
-	denlimbs = MpzToPadicLimbs(aux->z2,&nden,"PackPadic(den)");
-	if ( nden <= 0 ) {
-		if ( denlimbs ) M_free(denlimbs,"PackPadic(den)");
-		denlimbs = (UWORD *)Malloc1(sizeof(UWORD),"PackPadic(den1)");
-		denlimbs[0] = 1;
-		nden = 1;
-	}
-	if ( sign == 0 ) nnum = 0;
+	fmpz_get_mpz(aux->z1,padic_unit(aux->p4));
 
 	t = fun;
 	*t++ = PADICFUN;
 	t++;
 	FILLFUN(t);
 
-	t = WriteLongArg(t,PadicPrime);
-	t = WriteLongArg(t,PadicPrecision);
-	t = WriteSmallArg(t,sign);
-	t = WriteSmallArg(t,nnum);
-	for ( i = 0; i < nnum; i++ ) {
-		t = WriteSmallArg(t,(WORD)numlimbs[i]);
-	}
-	t = WriteSmallArg(t,nden);
-	for ( i = 0; i < nden; i++ ) {
-		t = WriteSmallArg(t,(WORD)denlimbs[i]);
-	}
+	t = WriteLongArg(t,v);
+	t = WriteLongArg(t,N);
+	t = WriteMpzArg(t,aux->z1,"PackPadic(unit)");
 	fun[1] = t - fun;
-
-	if ( numlimbs ) M_free(numlimbs,"PackPadic(num)");
-	if ( denlimbs ) M_free(denlimbs,"PackPadic(den)");
 	return(fun[1]);
 }
 
@@ -452,22 +463,25 @@ int PadicIsPrime(LONG p)
 
 int StartPadicSystem(LONG p, LONG N)
 {
+	fmpz_t prime;
 	if ( p <= 1 || N <= 0 ) return(1);
 	if ( PadicRuntimeActive ) {
 		ClearPadicSystem();
 	}
-	if ( !PadicPrimeInitialized ) {
-		fmpz_init(PadicPrimeFmpz);
-		PadicPrimeInitialized = 1;
+	if ( AM.PadicContext == 0 ) {
+		AM.PadicContext = Malloc1(sizeof(padic_ctx_struct),"PadicContext");
+		if ( AM.PadicContext == 0 ) return(1);
 	}
 	if ( PadicContextInitialized ) {
-		padic_ctx_clear(PadicContext);
+		padic_ctx_clear(ActivePadicContext);
 		PadicContextInitialized = 0;
 	}
 	PadicPrime = p;
 	PadicPrecision = N;
-	fmpz_set_si(PadicPrimeFmpz,(slong)p);
-	padic_ctx_init(PadicContext,PadicPrimeFmpz,0,(slong)N,PADIC_SERIES);
+	fmpz_init(prime);
+	fmpz_set_si(prime,(slong)p);
+	padic_ctx_init(ActivePadicContext,prime,0,(slong)N,PADIC_SERIES);
+	fmpz_clear(prime);
 	PadicContextInitialized = 1;
 	PadicRuntimeActive = 1;
 
@@ -485,8 +499,12 @@ void ClearPadicSystem(void)
 {
 	ClearPadicAuxForAllThreads();
 	if ( PadicContextInitialized ) {
-		padic_ctx_clear(PadicContext);
+		padic_ctx_clear(ActivePadicContext);
 		PadicContextInitialized = 0;
+	}
+	if ( AM.PadicContext ) {
+		M_free(AM.PadicContext,"PadicContext");
+		AM.PadicContext = 0;
 	}
 	PadicRuntimeActive = 0;
 	PadicPrime = 0;
@@ -506,41 +524,28 @@ void ClearPadicSystem(void)
 int TestPadic(WORD *fun)
 {
 	WORD *f, *fstop;
-	LONG p, N;
-	WORD sign, nnum, nden, i;
+	WORD nargs;
+	LONG v, N;
+	mpz_t z;
 
 	f = fun + FUNHEAD;
 	fstop = fun + fun[1];
+	nargs = 0;
+	while ( f < fstop ) {
+		nargs++;
+		NEXTARG(f);
+	}
+	if ( nargs != 3 ) return(0);
 
-	f = ReadLongArg(f,&p);
-	if ( f == 0 || p <= 1 ) return(0);
+	f = fun + FUNHEAD;
+	f = ReadLongArg(f,&v);
+	if ( f == 0 ) return(0);
 	f = ReadLongArg(f,&N);
 	if ( f == 0 || N <= 0 ) return(0);
-
-	if ( f >= fstop || *f != -SNUMBER ) return(0);
-	sign = f[1];
-	if ( sign < -1 || sign > 1 ) return(0);
-	f += 2;
-
-	if ( f >= fstop || *f != -SNUMBER ) return(0);
-	nnum = f[1];
-	if ( nnum < 0 ) return(0);
-	f += 2;
-	for ( i = 0; i < nnum; i++ ) {
-		if ( f >= fstop || *f != -SNUMBER ) return(0);
-		f += 2;
-	}
-
-	if ( f >= fstop || *f != -SNUMBER ) return(0);
-	nden = f[1];
-	if ( nden <= 0 ) return(0);
-	f += 2;
-	for ( i = 0; i < nden; i++ ) {
-		if ( f >= fstop || *f != -SNUMBER ) return(0);
-		f += 2;
-	}
-	if ( f != fstop ) return(0);
-	if ( sign == 0 && nnum != 0 ) return(0);
+	mpz_init(z);
+	f = ReadMpzArg(f,fstop,z);
+	mpz_clear(z);
+	if ( f == 0 || f != fstop ) return(0);
 	return(1);
 }
 
@@ -551,7 +556,7 @@ int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 	aux = (PADIC_AUX *)(AT.padic_aux_);
 	if ( aux == 0 ) return(-1);
 	FormRatToMpq(aux->q1,formrat,nrat);
-	padic_set_mpq(aux->p1,aux->q1,PadicContext);
+	padic_set_mpq(aux->p1,aux->q1,ActivePadicContext);
 	PackPadic(aux,outfun,aux->p1);
 	return(0);
 }
@@ -564,8 +569,8 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 	if ( aux == 0 ) return(-1);
 	if ( UnpackPadic(aux,aux->p1,infun) ) return(-1);
 	FormRatToMpq(aux->q1,formrat,nrat);
-	padic_set_mpq(aux->p2,aux->q1,PadicContext);
-	padic_mul(aux->p3,aux->p1,aux->p2,PadicContext);
+	padic_set_mpq(aux->p2,aux->q1,ActivePadicContext);
+	padic_mul(aux->p3,aux->p1,aux->p2,ActivePadicContext);
 	PackPadic(aux,outfun,aux->p3);
 	return(0);
 }
@@ -578,7 +583,7 @@ int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 	if ( aux == 0 ) return(-1);
 	if ( UnpackPadic(aux,aux->p1,fun1) ) return(-1);
 	if ( UnpackPadic(aux,aux->p2,fun2) ) return(-1);
-	padic_mul(aux->p3,aux->p1,aux->p2,PadicContext);
+	padic_mul(aux->p3,aux->p1,aux->p2,ActivePadicContext);
 	PackPadic(aux,fun3,aux->p3);
 	return(0);
 }
@@ -598,7 +603,7 @@ int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 		Terminate(-1);
 		return(-1);
 	}
-	padic_div(aux->p3,aux->p1,aux->p2,PadicContext);
+	padic_div(aux->p3,aux->p1,aux->p2,ActivePadicContext);
 	PackPadic(aux,fun3,aux->p3);
 	return(0);
 }
@@ -623,14 +628,14 @@ int PrintPadic(WORD *fun,int numdigits)
 	if ( numdigits > 0 && numdigits < digits ) digits = numdigits;
 
 	if ( digits == (int)PadicPrecision ) {
-		flint_string = padic_get_str(0,aux->p1,PadicContext);
+		flint_string = padic_get_str(0,aux->p1,ActivePadicContext);
 	}
 	else {
 		padic_ctx_t short_ctx;
 		padic_t short_x;
-		padic_ctx_init(short_ctx,PadicPrimeFmpz,0,(slong)digits,PADIC_SERIES);
+		padic_ctx_init(short_ctx,ActivePadicContext->p,0,(slong)digits,PADIC_SERIES);
 		padic_init2(short_x,digits);
-		padic_get_mpq(aux->q1,aux->p1,PadicContext);
+		padic_get_mpq(aux->q1,aux->p1,ActivePadicContext);
 		padic_set_mpq(short_x,aux->q1,short_ctx);
 		flint_string = padic_get_str(0,short_x,short_ctx);
 		padic_clear(short_x);
@@ -643,26 +648,34 @@ int PrintPadic(WORD *fun,int numdigits)
 	if ( digits < (int)PadicPrecision && strstr(flint_string,"O(") == 0 ) {
 		char tail[64];
 		size_t tail_len;
+		size_t new_len;
 		snprintf(tail,sizeof(tail)," + O(%ld^%d)",(long)PadicPrime,digits);
 		tail_len = strlen(tail);
-		if ( AO.padicspace == 0 || AO.padicsize <= (LONG)(n + tail_len) ) {
+		new_len = n + tail_len + 2;
+		if ( AO.padicspace == 0 || AO.padicsize <= (LONG)new_len ) {
 			if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
-			AO.padicsize = (LONG)(n + tail_len) + 32;
+			AO.padicsize = (LONG)new_len + 32;
 			AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
 		}
-		strcpy((char *)AO.padicspace,flint_string);
-		strcat((char *)AO.padicspace,tail);
-		n += tail_len;
+		((char *)AO.padicspace)[0] = '(';
+		memcpy((char *)AO.padicspace + 1, flint_string, n);
+		memcpy((char *)AO.padicspace + 1 + n, tail, tail_len);
+		((char *)AO.padicspace)[1 + n + tail_len] = ')';
+		((char *)AO.padicspace)[new_len] = 0;
 		flint_free(flint_string);
-		return((int)n);
+		return((int)new_len);
 	}
 
+	n += 2;
 	if ( AO.padicspace == 0 || AO.padicsize <= (LONG)n ) {
 		if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
 		AO.padicsize = (LONG)n + 32;
 		AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
 	}
-	strcpy((char *)AO.padicspace,flint_string);
+	((char *)AO.padicspace)[0] = '(';
+	memcpy((char *)AO.padicspace + 1, flint_string, n - 2);
+	((char *)AO.padicspace)[n - 1] = ')';
+	((char *)AO.padicspace)[n] = 0;
 	flint_free(flint_string);
 	return((int)n);
 }
@@ -713,7 +726,7 @@ int ToPadic(PHEAD WORD *term, WORD level)
 	}
 
 	FormRatToMpq(aux->q1,(UWORD *)tstop,(t[-1]));
-	padic_set_mpq(aux->p1,aux->q1,PadicContext);
+	padic_set_mpq(aux->p1,aux->q1,ActivePadicContext);
 	PackPadic(aux,tstop,aux->p1);
 	tstop += tstop[1];
 	*tstop++ = 1;
@@ -749,23 +762,23 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		UnpackPadic(aux,aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
+		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,ActivePadicContext);
 		UnpackPadic(aux,aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
+		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,ActivePadicContext);
 	}
 	else if ( AT.SortPadicMode == 1 ) {
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		UnpackPadic(aux,aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
+		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,ActivePadicContext);
 		FormRatToMpq(aux->q1,(UWORD *)coef2,size2);
-		padic_set_mpq(aux->p2,aux->q1,PadicContext);
+		padic_set_mpq(aux->p2,aux->q1,ActivePadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		UnpackPadic(aux,aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
+		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,ActivePadicContext);
 		FormRatToMpq(aux->q1,(UWORD *)coef1,size1);
-		padic_set_mpq(aux->p1,aux->q1,PadicContext);
+		padic_set_mpq(aux->p1,aux->q1,ActivePadicContext);
 	}
 	else {
 		MLOCK(ErrorMessageLock);
@@ -775,7 +788,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		return(0);
 	}
 
-	padic_add(aux->p3,aux->p1,aux->p2,PadicContext);
+	padic_add(aux->p3,aux->p1,aux->p2,ActivePadicContext);
 	if ( padic_is_zero(aux->p3) ) {
 		*ps1 = *ps2 = 0;
 		AT.SortPadicMode = 0;
@@ -856,23 +869,23 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 		fun1 = term1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		fun2 = term2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		UnpackPadic(aux,aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
+		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,ActivePadicContext);
 		UnpackPadic(aux,aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
+		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,ActivePadicContext);
 	}
 	else if ( AT.SortPadicMode == 1 ) {
 		fun1 = term1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		UnpackPadic(aux,aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
+		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,ActivePadicContext);
 		FormRatToMpq(aux->q1,(UWORD *)coef2,size2);
-		padic_set_mpq(aux->p2,aux->q1,PadicContext);
+		padic_set_mpq(aux->p2,aux->q1,ActivePadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
 		fun2 = term2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		FormRatToMpq(aux->q1,(UWORD *)coef1,size1);
-		padic_set_mpq(aux->p1,aux->q1,PadicContext);
+		padic_set_mpq(aux->p1,aux->q1,ActivePadicContext);
 		UnpackPadic(aux,aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
+		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,ActivePadicContext);
 	}
 	else {
 		MLOCK(ErrorMessageLock);
@@ -882,7 +895,7 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 		return(0);
 	}
 
-	padic_add(aux->p3,aux->p1,aux->p2,PadicContext);
+	padic_add(aux->p3,aux->p1,aux->p2,ActivePadicContext);
 	if ( padic_is_zero(aux->p3) ) {
 		AT.SortPadicMode = 0;
 		return(0);
