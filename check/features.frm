@@ -1989,7 +1989,7 @@ assert compile_error?("Illegal argument(s) in ToRat statement: 'z'")
 Local F = 1;
 Topadic;
 .end
-#require (v=`#{FormTest.cfg.form_cmd} -v`; v.include?("+padic"))
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert compile_error?("Illegal attempt to convert to padic_ without activating p-adic numbers.")
 assert compile_error?("Forgotten #startpadic instruction?")
 *--#] topadic_error :
@@ -1998,29 +1998,35 @@ assert compile_error?("Forgotten #startpadic instruction?")
 Local F = 1;
 Topadic x;
 .end
-#require (v=`#{FormTest.cfg.form_cmd} -v`; v.include?("+padic"))
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert compile_error?("Illegal argument(s) in Topadic statement: 'x'")
 *--#] topadic_arg_error :
-*--#[ startpadic_error :
+*--#[ startpadic_error_prime :
 #StartPadic 4,N=6
 .end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert runtime_error?("The p parameter in #StartPadic should be prime: 4")
+*--#] startpadic_error_prime :
+*--#[ startpadic_error_precision :
 #StartPadic 5,N=0
 .end
-#require (v=`#{FormTest.cfg.form_cmd} -v`; v.include?("+padic"))
-assert runtime_error?("The p parameter in #StartPadic should be prime: 4")
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert runtime_error?("Illegal N parameter in #StartPadic: 0")
-*--#] startpadic_error :
-*--#[ padic_float_exclusion :
+*--#] startpadic_error_precision :
+*--#[ padic_float_exclusion_startfloat :
 #StartFloat 10d
 #StartPadic 5,N=6
 .end
-#StartPadic 5,N=6
-#StartFloat 10d
-.end
-#require (v=`#{FormTest.cfg.form_cmd} -v`; v.include?("+padic") && v.include?("+float"))
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic") && v.include?("+float"))
 assert runtime_error?("Simultaneous use of float_ and padic_ is not allowed.")
-assert stdout.scan(/Simultaneous use of float_ and padic_/).length >= 2
-*--#] padic_float_exclusion :
+*--#] padic_float_exclusion_startfloat :
+*--#[ padic_float_exclusion_startpadic :
+#StartPadic 5,N=6
+#StartFloat 10d
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic") && v.include?("+float"))
+assert runtime_error?("Simultaneous use of float_ and padic_ is not allowed.")
+*--#] padic_float_exclusion_startpadic :
 *--#[ padic_basic :
 #-
 #StartPadic 5,N=6
@@ -2029,13 +2035,14 @@ Symbol x;
 Local F = x/2 + x/2;
 Topadic;
 .sort
-Print;
+Print F;
+.sort
 
 Format padicprecision 3;
 Local H = x/3;
 Topadic;
 .sort
-Print;
+Print H;
 .end
 #StartPadic 7,4
 #StartPadic 11,N=5
@@ -2045,7 +2052,7 @@ Local G = x/11;
 Topadic;
 Print;
 .end
-#require (v=`#{FormTest.cfg.form_cmd} -v`; v.include?("+padic"))
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert succeeded?
 assert result("F").scan(/padic_\(/).length == 1
 assert result("F") =~ /x/
@@ -2053,6 +2060,190 @@ assert result("H") !~ /padic_\(/
 assert result("H") =~ /O\(5\^3\)/
 assert result("G") =~ /padic_\(11,5,/
 *--#] padic_basic :
+*--#[ padic_topadic_twice :
+#-
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F = x/2;
+Topadic;
+Topadic;
+.sort
+Print F;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") =~ /padic_\(5,6,/
+*--#] padic_topadic_twice :
+*--#[ padic_print_full :
+#-
+#StartPadic 5,N=6
+Format padicprecision;
+Symbol x;
+Local F = x/2;
+Topadic;
+.sort
+Print F;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") !~ /O\(5\^/
+*--#] padic_print_full :
+*--#[ padic_mulrat_mulpadics :
+#-
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F = 2*x*padic_(5,6,1,1,1,1,1)*padic_(5,6,1,1,1,1,1);
+.sort
+Print F;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") =~ /padic_\(5,6,/
+*--#] padic_mulrat_mulpadics :
+*--#[ padic_mulrat_zero :
+#-
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F = 3*x*padic_(5,6,0,0,1,1);
+.sort
+Print F;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") =~ /padic_\(5,6,0,0,1,1\)/
+*--#] padic_mulrat_zero :
+*--#[ padic_division :
+#-
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F = x/padic_(5,6,1,1,1,1,1);
+.sort
+Print F;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") =~ /padic_\(5,6,/
+*--#] padic_division :
+*--#[ padic_division_by_zero :
+#-
+#StartPadic 5,N=6
+Symbol x;
+Local F = x/padic_(5,6,0,0,1,1);
+.sort
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert runtime_error?("Division by zero in p-adic arithmetic.")
+*--#] padic_division_by_zero :
+*--#[ padic_add_mixed_right :
+#-
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F = x + x*padic_(5,6,1,1,1,1,1);
+.sort
+Print F;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") =~ /padic_\(5,6,/
+*--#] padic_add_mixed_right :
+*--#[ padic_add_mixed_left :
+#-
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F = x*padic_(5,6,1,1,1,1,1) + x;
+.sort
+Print F;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") =~ /padic_\(5,6,/
+*--#] padic_add_mixed_left :
+*--#[ padic_add_expand :
+#-
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F = x*padic_(5,6,1,1,-1,1,1) + x*padic_(5,6,1,1,1,1,1);
+.sort
+Print F;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") =~ /padic_\(5,6,/
+*--#] padic_add_expand :
+*--#[ padic_context_mismatch :
+#-
+#StartPadic 5,N=6
+Symbol x;
+Local F = x*padic_(5,6,1,1,1,1,1) + x*padic_(7,4,1,1,1,1,1);
+.sort
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert runtime_error?("Incompatible p-adic context in padic_ coefficient")
+*--#] padic_context_mismatch :
+*--#[ padic_merge_padic :
+#-
+#: termsinsmall 8
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbols x1,x2,x3,x4;
+Local F = (x1+x2+x3+x4)^6 + (x1+x2+x3+x4)^6;
+.sort
+Topadic;
+.sort
+Print F;
+.end
+#require (threaded? && (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic")))
+assert succeeded?
+assert result("F").scan(/padic_\(5,6,/).length > 0
+*--#] padic_merge_padic :
+*--#[ padic_merge_zero :
+#-
+#: termsinsmall 2
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F =
+#do i=1,30
+  + x*padic_(5,6,1,1,1,1,1)
+#enddo
+#do i=1,30
+  + x*padic_(5,6,-1,1,1,1,1)
+#enddo
+  ;
+.sort
+Print F;
+.end
+#require (threaded? && (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic")))
+assert succeeded?
+*--#] padic_merge_zero :
+*--#[ padic_merge_mixed :
+#-
+#: termsinsmall 2
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F =
+#do i=1,40
+  + x
+#enddo
+#do i=1,40
+  + x*padic_(5,6,1,1,1,1,1)
+#enddo
+  ;
+.sort
+Print F;
+.end
+#require (threaded? && (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic")))
+assert succeeded?
+assert result("F") =~ /padic_\(5,6,/
+*--#] padic_merge_mixed :
 *--#[ format_and_floats :
 #-
 Off Statistics;

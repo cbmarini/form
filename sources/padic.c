@@ -37,6 +37,7 @@
 /* #] License : */
 
 #include "form3.h"
+#include <stdio.h>
 #include <string.h>
 
 /*
@@ -545,10 +546,9 @@ int TestPadic(WORD *fun)
 
 int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 {
-	GETBIDENTITY
 	PADIC_AUX *aux;
 	if ( !PadicRuntimeActive ) return(-1);
-	aux = GetPadicAux();
+	aux = (PADIC_AUX *)(AT.padic_aux_);
 	if ( aux == 0 ) return(-1);
 	FormRatToMpq(aux->q1,formrat,nrat);
 	padic_set_mpq(aux->p1,aux->q1,PadicContext);
@@ -558,10 +558,9 @@ int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 
 int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 {
-	GETBIDENTITY
 	PADIC_AUX *aux;
 	if ( !PadicRuntimeActive ) return(-1);
-	aux = GetPadicAux();
+	aux = (PADIC_AUX *)(AT.padic_aux_);
 	if ( aux == 0 ) return(-1);
 	if ( UnpackPadic(aux,aux->p1,infun) ) return(-1);
 	FormRatToMpq(aux->q1,formrat,nrat);
@@ -573,10 +572,9 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 
 int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
-	GETBIDENTITY
 	PADIC_AUX *aux;
 	if ( !PadicRuntimeActive ) return(-1);
-	aux = GetPadicAux();
+	aux = (PADIC_AUX *)(AT.padic_aux_);
 	if ( aux == 0 ) return(-1);
 	if ( UnpackPadic(aux,aux->p1,fun1) ) return(-1);
 	if ( UnpackPadic(aux,aux->p2,fun2) ) return(-1);
@@ -587,10 +585,9 @@ int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 
 int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
-	GETBIDENTITY
 	PADIC_AUX *aux;
 	if ( !PadicRuntimeActive ) return(-1);
-	aux = GetPadicAux();
+	aux = (PADIC_AUX *)(AT.padic_aux_);
 	if ( aux == 0 ) return(-1);
 	if ( UnpackPadic(aux,aux->p1,fun1) ) return(-1);
 	if ( UnpackPadic(aux,aux->p2,fun2) ) return(-1);
@@ -613,7 +610,6 @@ int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 
 int PrintPadic(WORD *fun,int numdigits)
 {
-	GETIDENTITY
 	PADIC_AUX *aux;
 	char *flint_string;
 	size_t n;
@@ -643,6 +639,24 @@ int PrintPadic(WORD *fun,int numdigits)
 	if ( flint_string == 0 ) return(0);
 
 	n = strlen(flint_string);
+	/* When truncating digits, append a Big-O tail unless FLINT already did. */
+	if ( digits < (int)PadicPrecision && strstr(flint_string,"O(") == 0 ) {
+		char tail[64];
+		size_t tail_len;
+		snprintf(tail,sizeof(tail)," + O(%ld^%d)",(long)PadicPrime,digits);
+		tail_len = strlen(tail);
+		if ( AO.padicspace == 0 || AO.padicsize <= (LONG)(n + tail_len) ) {
+			if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
+			AO.padicsize = (LONG)(n + tail_len) + 32;
+			AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
+		}
+		strcpy((char *)AO.padicspace,flint_string);
+		strcat((char *)AO.padicspace,tail);
+		n += tail_len;
+		flint_free(flint_string);
+		return((int)n);
+	}
+
 	if ( AO.padicspace == 0 || AO.padicsize <= (LONG)n ) {
 		if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
 		AO.padicsize = (LONG)n + 32;
