@@ -47,6 +47,7 @@
 #include <gmp.h>
 #include <flint/flint.h>
 #include <flint/fmpz.h>
+#include <flint/fmpq.h>
 #include <flint/padic.h>
 
 /*
@@ -608,6 +609,98 @@ int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 	return(0);
 }
 
+static int MpqToFormRat(UWORD *out, WORD *nratout, mpq_t q)
+{
+	int sign;
+	size_t nnum, nden, n, i, count;
+	mpz_t znum;
+
+	sign = mpq_sgn(q);
+	if ( sign == 0 ) {
+		*nratout = 3;
+		if ( out != 0 ) {
+			out[0] = 0;
+			out[1] = 1;
+			out[2] = 3;
+		}
+		return(0);
+	}
+
+	nnum = (mpz_sgn(mpq_numref(q)) == 0) ? 0 :
+		(size_t)((mpz_sizeinbase(mpq_numref(q),2) + BITSINWORD - 1) / BITSINWORD);
+	nden = (mpz_sgn(mpq_denref(q)) == 0) ? 0 :
+		(size_t)((mpz_sizeinbase(mpq_denref(q),2) + BITSINWORD - 1) / BITSINWORD);
+	if ( nden == 0 ) return(-1);
+	n = ( nnum > nden ) ? nnum : nden;
+	if ( n > (size_t)((WORD_MAX_VALUE-1)/2) ) return(-1);
+
+	*nratout = (WORD)(2*n + 1);
+	if ( sign < 0 ) *nratout = -*nratout;
+	if ( out == 0 ) return(0);
+
+	for ( i = 0; i < 2*n; i++ ) out[i] = 0;
+
+	mpz_init(znum);
+	mpz_set(znum,mpq_numref(q));
+	if ( mpz_sgn(znum) < 0 ) mpz_neg(znum,znum);
+	if ( nnum > 0 ) {
+		count = nnum;
+		mpz_export(out,&count,-1,sizeof(UWORD),0,0,znum);
+	}
+	if ( nden > 0 ) {
+		count = nden;
+		mpz_export(out+n,&count,-1,sizeof(UWORD),0,0,mpq_denref(q));
+	}
+	mpz_clear(znum);
+	out[2*n] = (UWORD)ABS(*nratout);
+	return(0);
+}
+
+/*
+	Reconstructs a small rational from a reduced p-adic value using FLINT's
+	rational reconstruction and applies the p-adic valuation afterwards.
+*/
+static int PadicReconstructToMpq(mpq_t out, padic_t in)
+{
+	fmpz_t residue, modulus, ppower;
+	fmpq_t recon;
+	slong v, N, modexp;
+	int ok = 0;
+
+	fmpz_init(residue);
+	fmpz_init(modulus);
+	fmpz_init(ppower);
+	fmpq_init(recon);
+
+	v = padic_get_val(in);
+	N = padic_get_prec(in);
+	modexp = N - v;
+	if ( modexp <= 0 ) goto ClearAndReturn;
+
+	fmpz_pow_ui(modulus,ActivePadicContext->p,(ulong)modexp);
+	fmpz_mod(residue,padic_unit(in),modulus);
+	ok = fmpq_reconstruct_fmpz(recon,residue,modulus);
+	if ( !ok ) goto ClearAndReturn;
+
+	if ( v > 0 ) {
+		fmpz_pow_ui(ppower,ActivePadicContext->p,(ulong)v);
+		fmpq_mul_fmpz(recon,recon,ppower);
+	}
+	else if ( v < 0 ) {
+		fmpz_pow_ui(ppower,ActivePadicContext->p,(ulong)(-v));
+		fmpq_div_fmpz(recon,recon,ppower);
+	}
+
+	fmpq_get_mpq(out,recon);
+
+ClearAndReturn:
+	fmpq_clear(recon);
+	fmpz_clear(ppower);
+	fmpz_clear(modulus);
+	fmpz_clear(residue);
+	return(ok ? 0 : -1);
+}
+
 /*
 	#] Validation and conversion :
 	#[ Printing :
@@ -701,6 +794,22 @@ int CoToPadic(UBYTE *s)
 	return(0);
 }
 
+int CoPadicToRat(UBYTE *s)
+{
+	if ( !PadicRuntimeActive ) {
+		MesPrint("&Illegal attempt to convert from padic_ without activating p-adic numbers.");
+		MesPrint("&Forgotten %#startpadic instruction?");
+		return(1);
+	}
+	while ( *s == ' ' || *s == ',' || *s == '\t' ) s++;
+	if ( *s ) {
+		MesPrint("&Illegal argument(s) in PadicToRat statement: '%s'",s);
+		return(1);
+	}
+	Add2Com(TYPETOPADICTORAT);
+	return(0);
+}
+
 int ToPadic(PHEAD WORD *term, WORD level)
 {
 	GETBIDENTITY
@@ -736,6 +845,62 @@ int ToPadic(PHEAD WORD *term, WORD level)
 	*term = tstop - term;
 	AT.WorkPointer = tstop;
 	return(Generator(BHEAD term,level));
+}
+
+int PadicToRat(PHEAD WORD *term, WORD level)
+{
+	GETBIDENTITY
+	PADIC_AUX *aux;
+	WORD *tstop, *t, *stop, nsize, nsign, ncoef;
+
+	if ( !PadicRuntimeActive ) return(1);
+	aux = GetPadicAux();
+	if ( aux == 0 ) return(1);
+
+	tstop = term + *term;
+	nsize = ABS(tstop[-1]);
+	nsign = tstop[-1] < 0 ? -1 : 1;
+	tstop -= nsize;
+	t = term + 1;
+	while ( t < tstop ) {
+		if ( *t == PADICFUN && t + t[1] == tstop && TestPadic(t)
+		 && nsize == 3 && tstop[0] == 1 && tstop[1] == 1 ) break;
+		t += t[1];
+	}
+	if ( t < tstop ) {
+		if ( UnpackPadic(aux,aux->p1,t) ) return(1);
+		if ( padic_is_zero(aux->p1) ) return(0);
+		if ( PadicReconstructToMpq(aux->q1,aux->p1) ) {
+			/*
+				No unique small reconstruction exists for the current precision.
+				Fall back to FLINT's canonical lift.
+			*/
+			padic_get_mpq(aux->q1,aux->p1,ActivePadicContext);
+		}
+		if ( MpqToFormRat(0,&ncoef,aux->q1) ) goto RatFailure;
+		stop = (WORD *)(((UBYTE *)term) + AM.MaxTer);
+		if ( t + ABS(ncoef) > stop ) {
+			MLOCK(ErrorMessageLock);
+			MesPrint("Term too complex after p-adic to rational conversion. MaxTermSize = %10l",
+				AM.MaxTer/sizeof(WORD));
+			MUNLOCK(ErrorMessageLock);
+			Terminate(-1);
+			return(1);
+		}
+		if ( MpqToFormRat((UWORD *)t,&ncoef,aux->q1) ) goto RatFailure;
+		if ( t[0] == 0 && t[1] == 1 && ncoef == 3 ) return(0);
+		t += ABS(ncoef);
+		t[-1] = ncoef*nsign;
+		*term = t - term;
+	}
+	return(Generator(BHEAD term,level));
+
+RatFailure:
+	MLOCK(ErrorMessageLock);
+	MesPrint("Failed to convert p-adic coefficient to rational.");
+	MUNLOCK(ErrorMessageLock);
+	Terminate(-1);
+	return(1);
 }
 
 /*
