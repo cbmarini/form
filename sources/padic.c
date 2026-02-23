@@ -51,7 +51,7 @@
 #include <flint/padic.h>
 
 /*
-	#[ Runtime state :
+  	#[ Runtime state :
 
 	FORM keeps a single active p-adic context per run:
 	- prime p
@@ -78,16 +78,19 @@ typedef struct PADIC_AUX_ {
 } PADIC_AUX;
 
 /*
-	#] Runtime state :
-	#[ Helpers :
+  	#] Runtime state :
+  	#[ Helpers :
+ 		#[ GetPadicAux :
 */
-
 static PADIC_AUX *GetPadicAux(void)
 {
 	GETIDENTITY
 	return (PADIC_AUX *)(AT.padic_aux_);
 }
-
+/*
+ 		#] GetPadicAux :
+ 		#[ InitPadicAux :
+*/
 static void InitPadicAux(PADIC_AUX *aux, LONG prec)
 {
 	padic_init2(aux->p1, (slong)prec);
@@ -98,7 +101,10 @@ static void InitPadicAux(PADIC_AUX *aux, LONG prec)
 	mpz_init(aux->z1);
 	mpz_init(aux->z2);
 }
-
+/*
+ 		#] InitPadicAux :
+ 		#[ ClearPadicAux :
+*/
 static void ClearPadicAux(PADIC_AUX *aux)
 {
 	padic_clear(aux->p1);
@@ -109,7 +115,10 @@ static void ClearPadicAux(PADIC_AUX *aux)
 	mpz_clear(aux->z1);
 	mpz_clear(aux->z2);
 }
-
+/*
+ 		#] ClearPadicAux :
+ 		#[ AllocatePadicAuxForAllThreads :
+*/
 static int AllocatePadicAuxForAllThreads(void)
 {
 #ifdef WITHPTHREADS
@@ -145,7 +154,10 @@ static int AllocatePadicAuxForAllThreads(void)
 #endif
 	return(0);
 }
-
+/*
+ 		#] AllocatePadicAuxForAllThreads :
+ 		#[ ClearPadicAuxForAllThreads :
+*/
 static void ClearPadicAuxForAllThreads(void)
 {
 #ifdef WITHPTHREADS
@@ -169,15 +181,20 @@ static void ClearPadicAuxForAllThreads(void)
 	}
 #endif
 }
-
+/*
+ 		#] ClearPadicAuxForAllThreads :
+ 		#[ WriteSmallArg :
+*/
 static WORD *WriteSmallArg(WORD *t, WORD value)
 {
 	*t++ = -SNUMBER;
 	*t++ = value;
 	return(t);
 }
-
 /*
+ 		#] WriteSmallArg :
+ 		#[ WriteLongArg :
+
 	Writes a signed LONG argument in either compact -SNUMBER form or as
 	a two-word long integer argument (same internal style used in float.c
 	for signed long exponents).
@@ -200,8 +217,10 @@ static WORD *WriteLongArg(WORD *t, LONG value)
 	*t++ = (value < 0) ? -5 : 5;
 	return(t);
 }
-
 /*
+ 		#] WriteLongArg :
+ 		#[ ReadLongArg :
+
 	Reads a signed LONG argument written by WriteLongArg.
 	Returns 0 on failure.
 */
@@ -221,8 +240,10 @@ static WORD *ReadLongArg(WORD *t, LONG *value)
 	}
 	return(0);
 }
-
 /*
+ 		#] ReadLongArg :
+ 		#[ FormRatToMpq :
+
 	Converts the internal Form coefficient representation (formrat/ratsize)
 	to a GMP rational.
 */
@@ -260,7 +281,10 @@ static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
 	mpz_clear(zden);
 	mpz_clear(znum);
 }
-
+/*
+ 		#] FormRatToMpq :
+ 		#[ WriteMpzArg :
+*/
 static WORD *WriteMpzArg(WORD *t, mpz_t z, const char *who)
 {
 	LONG small;
@@ -329,7 +353,10 @@ static WORD *WriteMpzArg(WORD *t, mpz_t z, const char *who)
 	M_free(limbs,who);
 	return(t);
 }
-
+/*
+ 		#] WriteMpzArg :
+ 		#[ ReadMpzArg :
+*/
 static WORD *ReadMpzArg(WORD *f, WORD *fstop, mpz_t z)
 {
 	WORD nnum, i, signcode;
@@ -357,7 +384,10 @@ static WORD *ReadMpzArg(WORD *f, WORD *fstop, mpz_t z)
 	if ( signcode < 0 ) mpz_neg(z,z);
 	return(f + *f);
 }
-
+/*
+ 		#] ReadMpzArg :
+ 		#[ ContextMismatchError :
+*/
 static void ContextMismatchError(LONG N)
 {
 	MLOCK(ErrorMessageLock);
@@ -367,9 +397,10 @@ static void ContextMismatchError(LONG N)
 	MUNLOCK(ErrorMessageLock);
 	Terminate(-1);
 }
-
 /*
-	#[ Internal p-adic function format :
+ 		#] ContextMismatchError :
+  	#[ Internal p-adic function format :
+ 		#[ UnpackPadic :
 
 	The internal `padic_` representation stores the FLINT triplet (u,v,N):
 
@@ -378,7 +409,6 @@ static void ContextMismatchError(LONG N)
 	where u is encoded as a normal Form integer argument (either -SNUMBER
 	or a long integer n/1 argument, exactly as in float_ limb packing).
 */
-
 static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 {
 	WORD *f, *fstop;
@@ -415,7 +445,10 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 	padic_reduce(out,ActivePadicContext);
 	return(0);
 }
-
+/*
+ 		#] UnpackPadic :
+ 		#[ PackPadic :
+*/
 static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 {
 	WORD *t;
@@ -439,17 +472,21 @@ static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 	fun[1] = t - fun;
 	return(fun[1]);
 }
-
 /*
-	#] Helpers :
-	#[ Runtime lifecycle :
+ 		#] PackPadic :
+ 		#] Internal p-adic function format :
+  	#] Helpers :
+  	#[ Runtime lifecycle :
+ 		#[ PadicIsActive :
 */
-
 int PadicIsActive(void)
 {
 	return(PadicRuntimeActive);
 }
-
+/*
+ 		#] PadicIsActive :
+ 		#[ PadicIsPrime :
+*/
 int PadicIsPrime(LONG p)
 {
 	int prime;
@@ -461,7 +498,10 @@ int PadicIsPrime(LONG p)
 	fmpz_clear(z);
 	return(prime == 1);
 }
-
+/*
+ 		#] PadicIsPrime :
+ 		#[ StartPadicSystem :
+*/
 int StartPadicSystem(LONG p, LONG N)
 {
 	fmpz_t prime;
@@ -495,7 +535,10 @@ int StartPadicSystem(LONG p, LONG N)
 	}
 	return(0);
 }
-
+/*
+ 		#] StartPadicSystem :
+ 		#[ ClearPadicSystem :
+*/
 void ClearPadicSystem(void)
 {
 	ClearPadicAuxForAllThreads();
@@ -516,12 +559,12 @@ void ClearPadicSystem(void)
 		AO.padicsize = 0;
 	}
 }
-
 /*
-	#] Runtime lifecycle :
-	#[ Validation and conversion :
+ 		#] ClearPadicSystem :
+  	#] Runtime lifecycle :
+  	#[ Validation and conversion :
+ 		#[ TestPadic :
 */
-
 int TestPadic(WORD *fun)
 {
 	WORD *f, *fstop;
@@ -549,7 +592,10 @@ int TestPadic(WORD *fun)
 	if ( f == 0 || f != fstop ) return(0);
 	return(1);
 }
-
+/*
+ 		#] TestPadic :
+ 		#[ RatToPadicFun :
+*/
 int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 {
 	PADIC_AUX *aux;
@@ -561,7 +607,10 @@ int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 	PackPadic(aux,outfun,aux->p1);
 	return(0);
 }
-
+/*
+ 		#] RatToPadicFun :
+ 		#[ MulRatToPadic :
+*/
 int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 {
 	PADIC_AUX *aux;
@@ -575,7 +624,10 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 	PackPadic(aux,outfun,aux->p3);
 	return(0);
 }
-
+/*
+ 		#] MulRatToPadic :
+ 		#[ MulPadics :
+*/
 int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
 	PADIC_AUX *aux;
@@ -588,7 +640,10 @@ int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 	PackPadic(aux,fun3,aux->p3);
 	return(0);
 }
-
+/*
+ 		#] MulPadics :
+ 		#[ DivPadics :
+*/
 int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
 	PADIC_AUX *aux;
@@ -608,7 +663,10 @@ int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 	PackPadic(aux,fun3,aux->p3);
 	return(0);
 }
-
+/*
+ 		#] DivPadics :
+ 		#[ MpqToFormRat :
+*/
 static int MpqToFormRat(UWORD *out, WORD *nratout, mpq_t q)
 {
 	int sign;
@@ -655,8 +713,10 @@ static int MpqToFormRat(UWORD *out, WORD *nratout, mpq_t q)
 	out[2*n] = (UWORD)ABS(*nratout);
 	return(0);
 }
-
 /*
+ 		#] MpqToFormRat :
+ 		#[ PadicReconstructToMpq :
+
 	Reconstructs a small rational from a reduced p-adic value using FLINT's
 	rational reconstruction and applies the p-adic valuation afterwards.
 */
@@ -700,12 +760,12 @@ ClearAndReturn:
 	fmpz_clear(residue);
 	return(ok ? 0 : -1);
 }
-
 /*
-	#] Validation and conversion :
-	#[ Printing :
+ 		#] PadicReconstructToMpq :
+  	#] Validation and conversion :
+  	#[ Printing :
+ 		#[ PrintPadic :
 */
-
 int PrintPadic(WORD *fun,int numdigits)
 {
 	PADIC_AUX *aux;
@@ -772,12 +832,12 @@ int PrintPadic(WORD *fun,int numdigits)
 	flint_free(flint_string);
 	return((int)n);
 }
-
 /*
-	#] Printing :
-	#[ Compiler/runtime statements :
+ 		#] PrintPadic :
+  	#] Printing :
+  	#[ Compiler/runtime statements :
+ 		#[ CoToPadic :
 */
-
 int CoToPadic(UBYTE *s)
 {
 	if ( !PadicRuntimeActive ) {
@@ -793,7 +853,10 @@ int CoToPadic(UBYTE *s)
 	Add2Com(TYPETOPADIC);
 	return(0);
 }
-
+/*
+ 		#] CoToPadic :
+ 		#[ CoPadicToRat :
+*/
 int CoPadicToRat(UBYTE *s)
 {
 	if ( !PadicRuntimeActive ) {
@@ -809,7 +872,10 @@ int CoPadicToRat(UBYTE *s)
 	Add2Com(TYPETOPADICTORAT);
 	return(0);
 }
-
+/*
+ 		#] CoPadicToRat :
+ 		#[ ToPadic :
+*/
 int ToPadic(PHEAD WORD *term, WORD level)
 {
 	GETBIDENTITY
@@ -846,7 +912,10 @@ int ToPadic(PHEAD WORD *term, WORD level)
 	AT.WorkPointer = tstop;
 	return(Generator(BHEAD term,level));
 }
-
+/*
+ 		#] ToPadic :
+ 		#[ PadicToRat :
+*/
 int PadicToRat(PHEAD WORD *term, WORD level)
 {
 	GETBIDENTITY
@@ -902,12 +971,12 @@ RatFailure:
 	Terminate(-1);
 	return(1);
 }
-
 /*
-	#] Compiler/runtime statements :
-	#[ Sorting :
+ 		#] PadicToRat :
+  	#] Compiler/runtime statements :
+  	#[ Sorting :
+ 		#[ AddWithPadic :
 */
-
 int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 {
 	GETBIDENTITY
@@ -1017,7 +1086,10 @@ Finished:
 	}
 	return(1);
 }
-
+/*
+ 		#] AddWithPadic :
+ 		#[ MergeWithPadic :
+*/
 int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 {
 	GETBIDENTITY
@@ -1121,7 +1193,10 @@ Over1:
 	AT.SortPadicMode = 0;
 	return(retval);
 }
+/*
+ 		#] MergeWithPadic :
+*/
 
 /*
-	#] Sorting :
+  	#] Sorting :
 */
