@@ -3985,6 +3985,12 @@ CommonEnd:
 					if ( Chop(BHEAD term,level) ) goto GenCall;
 					goto Return0;
 #endif
+#ifdef WITHPADIC
+				  case TYPETOPADIC:
+					AT.WorkPointer = term + *term;
+					if ( ToPadic(BHEAD term,level) ) goto GenCall;
+					goto Return0;
+#endif
 				}
 				goto SkipCount;
 /*

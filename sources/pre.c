@@ -73,6 +73,9 @@ static KEYWORD precommands[] = {
 #ifdef WITHFLOAT
     ,{"endfloat"     , DoEndFloat     , 0, 0}
 #endif
+#ifdef WITHPADIC
+    ,{"endpadic"     , DoEndPadic     , 0, 0}
+#endif
 	,{"endif"        , DoEndif        , 0, 0}
 	,{"endinside"    , DoEndInside    , 0, 0}
 	,{"endnamespace" , DoEndNamespace , 0, 0}
@@ -113,6 +116,9 @@ static KEYWORD precommands[] = {
 	,{"sortreallocate", DoPreSortReallocate , 0, 0}
 #ifdef WITHFLOAT
     ,{"startfloat"   , DoStartFloat   , 0, 0}
+#endif
+#ifdef WITHPADIC
+    ,{"startpadic"   , DoStartPadic   , 0, 0}
 #endif
 	,{"switch"       , DoPreSwitch    , 0, 0}
 	,{"system"       , DoSystem       , 0, 0}
@@ -7769,6 +7775,12 @@ int DoStartFloat(UBYTE *s)
 		MesPrint("@Simultaneous use of floating point and modulus arithmetic makes no sense.");
 		error = 1;
 	}
+#ifdef WITHPADIC
+	if ( PadicIsActive() ) {
+		MesPrint("@Simultaneous use of float_ and padic_ is not allowed.");
+		error = 1;
+	}
+#endif
 	if ( AT.aux_ ) { // First, we clean up any previous floating point system. 
 		ClearfFloat();
 		ClearMZVTables();
@@ -7871,5 +7883,110 @@ int DoEndFloat(UBYTE *s)
 #endif
 /*
  		#] DoEndFloat : 
+ 		#[ DoStartPadic :
+*/
+#ifdef WITHPADIC
+
+int DoStartPadic(UBYTE *s)
+{
+	GETIDENTITY
+	int error = 0;
+	LONG p = 0, N = 0;
+	UBYTE *ss;
+
+	if ( AP.PreSwitchModes[AP.PreSwitchLevel] != EXECUTINGPRESWITCH ) return(0);
+	if ( AP.PreIfStack[AP.PreIfLevel] != EXECUTINGIF ) return(0);
+
+	if ( AR.PolyFun != 0 ) {
+		MesPrint("@Simultaneous use of Poly(Rat)Fun and padic_ is not allowed.");
+		error = 1;
+	}
+	if ( AC.ncmod != 0 ) {
+		MesPrint("@Simultaneous use of p-adic and modulus arithmetic makes no sense.");
+		error = 1;
+	}
+#ifdef WITHFLOAT
+	if ( AT.aux_ != 0 ) {
+		MesPrint("@Simultaneous use of float_ and padic_ is not allowed.");
+		error = 1;
+	}
+#endif
+
+	while ( *s == ',' || *s == ' ' || *s == '\t' ) s++;
+	ss = s;
+	if ( *s < '0' || *s > '9' ) goto IllPar;
+	do {
+		p = 10 * p + (*s++ - '0');
+	} while ( *s >= '0' && *s <= '9' );
+	while ( *s == ' ' || *s == '\t' ) s++;
+	if ( *s != ',' ) goto IllPar;
+	s++;
+	while ( *s == ' ' || *s == '\t' ) s++;
+
+	if ( tolower(*s) == 'n' ) {
+		s++;
+		while ( *s == ' ' || *s == '\t' ) s++;
+		if ( *s != '=') goto IllPar;
+		s++;
+		while ( *s == ' ' || *s == '\t' ) s++;
+	}
+
+	if ( *s < '0' || *s > '9' ) goto IllPar;
+	do {
+		N = 10 * N + (*s++ - '0');
+	} while ( *s >= '0' && *s <= '9' );
+	while ( *s == ' ' || *s == '\t' ) s++;
+	if ( *s != 0 ) goto IllPar;
+
+	if ( p <= 1 ) {
+		MesPrint("@Illegal p parameter in %#StartPadic: %l",p);
+		error = 1;
+	}
+	else if ( PadicIsPrime(p) == 0 ) {
+		MesPrint("@The p parameter in %#StartPadic should be prime: %l",p);
+		error = 1;
+	}
+	if ( N <= 0 ) {
+		MesPrint("@Illegal N parameter in %#StartPadic: %l",N);
+		error = 1;
+	}
+
+	if ( error == 0 ) {
+		if ( StartPadicSystem(p,N) ) error = 1;
+		else AO.PadicPrec = 0;
+	}
+	return(error);
+
+IllPar:
+	MesPrint("@Illegal parameter in %#StartPadic: %s ",ss);
+	return(1);
+}
+
+#endif
+/*
+ 		#] DoStartPadic :
+ 		#[ DoEndPadic :
+*/
+#ifdef WITHPADIC
+
+int DoEndPadic(UBYTE *s)
+{
+	int error = 0;
+	if ( AP.PreSwitchModes[AP.PreSwitchLevel] != EXECUTINGPRESWITCH ) return(0);
+	if ( AP.PreIfStack[AP.PreIfLevel] != EXECUTINGIF ) return(0);
+	while ( *s == ',' || *s == ' ' || *s == '\t' ) s++;
+	if ( *s != 0 ) {
+		MesPrint("@Illegal parameter in %#EndPadic instruction: %s ",s);
+		error = 1;
+	}
+	if ( error == 0 ) {
+		ClearPadicSystem();
+	}
+	return(error);
+}
+
+#endif
+/*
+ 		#] DoEndPadic : 
  	# ] PreProcessor :
 */

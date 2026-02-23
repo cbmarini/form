@@ -366,6 +366,10 @@ TP=T+1;while(TP<TT){if(*TP==AR.PolyFun){TP[2]|=(DIRTYFLAG|MUSTCLEANPRF);}TP+=TP[
 
 #endif
 
+#ifdef WITHPADIC
+#define padicaux_ ((WORD *)(AT.padic_aux_))
+#endif
+
 
 /*
 	MesPrint("P-level popped to %d with %d",AP.PreAssignLevel,(WORD)(AC.iPointer - AC.iBuffer));
@@ -1754,6 +1758,25 @@ void SetfFloatPrecision(LONG);
 int EvaluateFun(PHEAD WORD *, WORD, WORD *);
 int CoStrictRounding(UBYTE *);
 int StrictRounding(PHEAD WORD *, WORD, WORD, WORD);
+#endif
+
+#ifdef WITHPADIC
+int DoStartPadic(UBYTE *);
+int DoEndPadic(UBYTE *);
+int PadicIsActive(void);
+int PadicIsPrime(LONG);
+int StartPadicSystem(LONG, LONG);
+void ClearPadicSystem(void);
+int CoToPadic(UBYTE *);
+int ToPadic(PHEAD WORD *,WORD);
+int PrintPadic(WORD *fun,int numdigits);
+int AddWithPadic(PHEAD WORD **,WORD **);
+int MergeWithPadic(PHEAD WORD **,WORD **);
+int MulPadics(PHEAD WORD *, WORD *, WORD *);
+int DivPadics(PHEAD WORD *, WORD *, WORD *);
+int RatToPadicFun(PHEAD WORD *, UWORD *, WORD);
+int MulRatToPadic(PHEAD WORD *, WORD *, UWORD *, WORD);
+int TestPadic(WORD *);
 #endif
 
 /*

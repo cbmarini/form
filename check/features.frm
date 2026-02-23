@@ -1984,6 +1984,75 @@ assert compile_error?("should be a built in function that can be evaluated numer
 assert compile_error?("Illegal argument(s) in ToFloat statement: 'y'")
 assert compile_error?("Illegal argument(s) in ToRat statement: 'z'")
 *--#] float_error :
+*--#[ topadic_error :
+#-
+Local F = 1;
+Topadic;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -v`; v.include?("+padic"))
+assert compile_error?("Illegal attempt to convert to padic_ without activating p-adic numbers.")
+assert compile_error?("Forgotten #startpadic instruction?")
+*--#] topadic_error :
+*--#[ topadic_arg_error :
+#StartPadic 5,N=6
+Local F = 1;
+Topadic x;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -v`; v.include?("+padic"))
+assert compile_error?("Illegal argument(s) in Topadic statement: 'x'")
+*--#] topadic_arg_error :
+*--#[ startpadic_error :
+#StartPadic 4,N=6
+.end
+#StartPadic 5,N=0
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -v`; v.include?("+padic"))
+assert runtime_error?("The p parameter in #StartPadic should be prime: 4")
+assert runtime_error?("Illegal N parameter in #StartPadic: 0")
+*--#] startpadic_error :
+*--#[ padic_float_exclusion :
+#StartFloat 10d
+#StartPadic 5,N=6
+.end
+#StartPadic 5,N=6
+#StartFloat 10d
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -v`; v.include?("+padic") && v.include?("+float"))
+assert runtime_error?("Simultaneous use of float_ and padic_ is not allowed.")
+assert stdout.scan(/Simultaneous use of float_ and padic_/).length >= 2
+*--#] padic_float_exclusion :
+*--#[ padic_basic :
+#-
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F = x/2 + x/2;
+Topadic;
+.sort
+Print;
+
+Format padicprecision 3;
+Local H = x/3;
+Topadic;
+.sort
+Print;
+.end
+#StartPadic 7,4
+#StartPadic 11,N=5
+Format padicprecision off;
+Symbol x;
+Local G = x/11;
+Topadic;
+Print;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -v`; v.include?("+padic"))
+assert succeeded?
+assert result("F").scan(/padic_\(/).length == 1
+assert result("F") =~ /x/
+assert result("H") !~ /padic_\(/
+assert result("H") =~ /O\(5\^3\)/
+assert result("G") =~ /padic_\(11,5,/
+*--#] padic_basic :
 *--#[ format_and_floats :
 #-
 Off Statistics;

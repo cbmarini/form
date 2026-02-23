@@ -1933,8 +1933,13 @@ int WriteSubTerm(WORD *sterm, WORD first)
 int WriteInnerTerm(WORD *term, WORD first)
 {
 	WORD *t, *s, *s1, *s2, n, i, pow;
+#if defined(WITHFLOAT) || defined(WITHPADIC)
 #ifdef WITHFLOAT
 	int FloatChars = 0;
+#endif
+#ifdef WITHPADIC
+	int PadicChars = 0;
+#endif
 	GETIDENTITY
 #endif
 	t = term;
@@ -2013,6 +2018,28 @@ int WriteInnerTerm(WORD *term, WORD first)
 		if ( ss >= t ) first = 1;
 	}
 #endif
+#ifdef WITHPADIC
+/*
+	Check whether there is a proper padic_ function and no raw mode.
+	If so, print as p-adic series.
+	Raw mode is indicated as AO.PadicPrec < 0.
+	AO.PadicPrec == 0 indicates that all available digits are printed.
+*/
+	else if ( AO.PadicPrec >= 0 && AT.padic_aux_ != 0 ) {
+		WORD *ss = s;
+		while ( ss < t ) {
+			if ( *ss == PADICFUN ) {
+				if ( ( PadicChars = PrintPadic(ss,AO.PadicPrec) ) != 0 ) {
+					TokenToLine(AO.padicspace);
+					first = 0;
+				}
+				break;
+			}
+			ss += ss[1];
+		}
+		if ( ss >= t ) first = 1;
+	}
+#endif
 	else first = 1;
 	while ( s < t ) {
 		if ( lowestlevel && ( (AO.PrintType & (PRINTONEFUNCTION | PRINTALL)) == PRINTONEFUNCTION ) ) {
@@ -2062,6 +2089,11 @@ int WriteInnerTerm(WORD *term, WORD first)
 		if ( *s == FLOATFUN && AO.FloatPrec >= 0 && AT.aux_ != 0 ) {
 		}
 		else 
+#endif
+#ifdef WITHPADIC
+		if ( *s == PADICFUN && AO.PadicPrec >= 0 && AT.padic_aux_ != 0 ) {
+		}
+		else
 #endif
 		{
 			if ( *s >= FUNCTION && AC.funpowers > 0
