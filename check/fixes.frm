@@ -4581,3 +4581,17 @@ Symbol x;
 .end
 assert succeeded?
 *--#] PullReq691 :
+*--#[ padic_print_parentheses :
+#-
+#StartPadic 7,N=10
+Format padicprecision;
+Symbol a;
+Local F = a/98;
+Topadic;
+.sort
+Print F;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") =~ /\(.*\+.*\)\s*\*\s*a/m
+*--#] padic_print_parentheses :

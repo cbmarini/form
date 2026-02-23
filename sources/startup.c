@@ -1348,6 +1348,13 @@ void StartVariables(void)
 	AC.MaxWeight = AM.gMaxWeight = AM.ggMaxWeight = MAXWEIGHT;
 	AC.DefaultPrecision = AM.gDefaultPrecision = AM.ggDefaultPrecision = DEFAULTPRECISION;
 #endif
+#ifdef WITHPADIC
+	AM.PadicPrime = 0;
+	AM.PadicPrecision = 0;
+	AM.PadicRuntimeActive = 0;
+	AM.PadicContextInitialized = 0;
+	AM.PadicContext = 0;
+#endif
 	AC.CommuteInSet = 0;
 
 	AM.PrintTotalSize = 0;

@@ -1462,6 +1462,10 @@ struct M_const {
     LONG    ggDefaultPrecision;    /* (M) Default precision in bits for float_ */
     LONG    ggMaxWeight;           /* (M) Maximum weight for MZV or Euler */
 #endif
+#ifdef WITHPADIC
+    LONG    PadicPrime;            /* (M) Active prime for padic_ runtime */
+    LONG    PadicPrecision;        /* (M) Active precision for padic_ runtime */
+#endif
     int     FileOnlyFlag;          /* (M) Writing only to file */
     int     Interact;              /* (M) Interactive mode flag */
     int     MaxParLevel;           /* (M) Maximum nesting of parentheses */
@@ -1524,6 +1528,13 @@ struct M_const {
     int     gWTimeStatsFlag;
     int     ggWTimeStatsFlag;
     int     jumpratio;
+#ifdef WITHPADIC
+    int     PadicRuntimeActive;    /* (M) p-adic runtime currently active */
+    int     PadicContextInitialized; /* (M) active p-adic context initialized */
+#endif
+#ifdef WITHPADIC
+    void    *PadicContext;      /* (M) active FLINT p-adic context */
+#endif
     WORD    MaxTal;                /* (M) Maximum number of words in a number */
     WORD    IndDum;                /* (M) Basis value for dummy indices */
     WORD    DumInd;                /* (M) */

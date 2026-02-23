@@ -2058,7 +2058,7 @@ assert result("F").scan(/padic_\(/).length == 1
 assert result("F") =~ /x/
 assert result("H") !~ /padic_\(/
 assert result("H") =~ /O\(5\^3\)/
-assert result("G") =~ /padic_\(11,5,/
+assert result("G") =~ /padic_\(-1,5,/
 *--#] padic_basic :
 *--#[ padic_topadic_twice :
 #-
@@ -2073,7 +2073,7 @@ Print F;
 .end
 #require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert succeeded?
-assert result("F") =~ /padic_\(5,6,/
+assert result("F") =~ /padic_\(-?[0-9]+,6,/
 *--#] padic_topadic_twice :
 *--#[ padic_print_full :
 #-
@@ -2094,45 +2094,45 @@ assert result("F") !~ /O\(5\^/
 #StartPadic 5,N=6
 Format padicprecision off;
 Symbol x;
-Local F = 2*x*padic_(5,6,1,1,1,1,1)*padic_(5,6,1,1,1,1,1);
+Local F = 2*x*padic_(0,6,1)*padic_(0,6,1);
 .sort
 Print F;
 .end
 #require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert succeeded?
-assert result("F") =~ /padic_\(5,6,/
+assert result("F") =~ /padic_\(-?[0-9]+,6,/
 *--#] padic_mulrat_mulpadics :
 *--#[ padic_mulrat_zero :
 #-
 #StartPadic 5,N=6
 Format padicprecision off;
 Symbol x;
-Local F = 3*x*padic_(5,6,0,0,1,1);
+Local F = 3*x*padic_(0,6,0);
 .sort
 Print F;
 .end
 #require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert succeeded?
-assert result("F") =~ /padic_\(5,6,0,0,1,1\)/
+assert result("F") =~ /padic_\(0,6,0\)/
 *--#] padic_mulrat_zero :
 *--#[ padic_division :
 #-
 #StartPadic 5,N=6
 Format padicprecision off;
 Symbol x;
-Local F = x/padic_(5,6,1,1,1,1,1);
+Local F = x/padic_(0,6,1);
 .sort
 Print F;
 .end
 #require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert succeeded?
-assert result("F") =~ /padic_\(5,6,/
+assert result("F") =~ /padic_\(-?[0-9]+,6,/
 *--#] padic_division :
 *--#[ padic_division_by_zero :
 #-
 #StartPadic 5,N=6
 Symbol x;
-Local F = x/padic_(5,6,0,0,1,1);
+Local F = x/padic_(0,6,0);
 .sort
 .end
 #require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
@@ -2143,49 +2143,49 @@ assert runtime_error?("Division by zero in p-adic arithmetic.")
 #StartPadic 5,N=6
 Format padicprecision off;
 Symbol x;
-Local F = x + x*padic_(5,6,1,1,1,1,1);
+Local F = x + x*padic_(0,6,1);
 .sort
 Print F;
 .end
 #require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert succeeded?
-assert result("F") =~ /padic_\(5,6,/
+assert result("F") =~ /padic_\(-?[0-9]+,6,/
 *--#] padic_add_mixed_right :
 *--#[ padic_add_mixed_left :
 #-
 #StartPadic 5,N=6
 Format padicprecision off;
 Symbol x;
-Local F = x*padic_(5,6,1,1,1,1,1) + x;
+Local F = x*padic_(0,6,1) + x;
 .sort
 Print F;
 .end
 #require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert succeeded?
-assert result("F") =~ /padic_\(5,6,/
+assert result("F") =~ /padic_\(-?[0-9]+,6,/
 *--#] padic_add_mixed_left :
 *--#[ padic_add_expand :
 #-
 #StartPadic 5,N=6
 Format padicprecision off;
 Symbol x;
-Local F = x*padic_(5,6,1,1,-1,1,1) + x*padic_(5,6,1,1,1,1,1);
+Local F = x*padic_(0,6,2) + x*padic_(0,6,1);
 .sort
 Print F;
 .end
 #require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert succeeded?
-assert result("F") =~ /padic_\(5,6,/
+assert result("F") =~ /padic_\(-?[0-9]+,6,/
 *--#] padic_add_expand :
 *--#[ padic_context_mismatch :
 #-
 #StartPadic 5,N=6
 Symbol x;
-Local F = x*padic_(5,6,1,1,1,1,1) + x*padic_(7,4,1,1,1,1,1);
+Local F = x*padic_(0,6,1) + x*padic_(0,4,1);
 .sort
 .end
 #require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
-assert runtime_error?("Incompatible p-adic context in padic_ coefficient")
+assert runtime_error?("Incompatible p-adic precision in padic_ coefficient")
 *--#] padic_context_mismatch :
 *--#[ padic_merge_padic :
 #-
@@ -2201,7 +2201,7 @@ Print F;
 .end
 #require (threaded? && (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic")))
 assert succeeded?
-assert result("F").scan(/padic_\(5,6,/).length > 0
+assert result("F").scan(/padic_\(-?[0-9]+,6,/).length > 0
 *--#] padic_merge_padic :
 *--#[ padic_merge_zero :
 #-
@@ -2211,10 +2211,10 @@ Format padicprecision off;
 Symbol x;
 Local F =
 #do i=1,30
-  + x*padic_(5,6,1,1,1,1,1)
+  + x*padic_(0,6,1)
 #enddo
 #do i=1,30
-  + x*padic_(5,6,-1,1,1,1,1)
+  + x*padic_(0,6,-1)
 #enddo
   ;
 .sort
@@ -2234,7 +2234,7 @@ Local F =
   + x
 #enddo
 #do i=1,40
-  + x*padic_(5,6,1,1,1,1,1)
+  + x*padic_(0,6,1)
 #enddo
   ;
 .sort
@@ -2242,7 +2242,7 @@ Print F;
 .end
 #require (threaded? && (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic")))
 assert succeeded?
-assert result("F") =~ /padic_\(5,6,/
+assert result("F") =~ /padic_\(-?[0-9]+,6,/
 *--#] padic_merge_mixed :
 *--#[ format_and_floats :
 #-
