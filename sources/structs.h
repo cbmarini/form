@@ -2111,6 +2111,9 @@ struct T_const {
     void    *aux_;
     void    *auxr_;
 #endif
+#ifdef WITHPADIC
+    void    *padic_aux_;
+#endif
     NORMDATA **NormData;
     LONG    NormDataSize;
     LONG    NormDepth;
@@ -2183,6 +2186,10 @@ struct T_const {
 #ifdef WITHFLOAT
     WORD    FloatPos;
     WORD    SortFloatMode;
+#endif
+#ifdef WITHPADIC
+    WORD    PadicPos;
+    WORD    SortPadicMode;
 #endif
 };
 /*
@@ -2379,6 +2386,10 @@ struct O_const {
     UBYTE   *floatspace;
     LONG    floatsize;
 #endif
+#ifdef WITHPADIC
+    UBYTE   *padicspace;
+    LONG    padicsize;
+#endif
 /*----Leave NumInBrack as first non-pointer. This is used by the checkpoints--*/
     LONG    NumInBrack;            /* (O) For typing [] option in print */
     LONG    wlen;                  /* (O) Used to store files. */
@@ -2406,6 +2417,9 @@ struct O_const {
     int     IndentSpace;           /* For indentation in output */
 #ifdef WITHFLOAT
     int     FloatPrec;
+#endif
+#ifdef WITHPADIC
+    int     PadicPrec;
 #endif
     WORD    schemenum;             /* for feeding a Horner scheme to Optimize */
     WORD    transFlag;             /* ()  >0 indicates that translations have to be done */

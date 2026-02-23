@@ -98,6 +98,11 @@ SRCBASE += \
 	float.c
 endif
 
+if WITHPADIC
+SRCBASE += \
+	padic.c
+endif
+
 if WITHZSTD
 SRCBASE += \
 	../extern/zstd/zlibWrapper/gzclose.c \

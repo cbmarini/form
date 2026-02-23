@@ -237,6 +237,9 @@ static KEYWORD com2commands[] = {
 #ifdef WITHFLOAT
 	,{"tofloat",        (TFUN)CoToFloat,          STATEMENT,    PARTEST}
 #endif
+#ifdef WITHPADIC
+	,{"topadic",        (TFUN)CoToPadic,          STATEMENT,    PARTEST}
+#endif
 	,{"topolynomial",   (TFUN)CoToPolynomial,     STATEMENT,    PARTEST}
 #ifdef WITHFLOAT
 	,{"torat",          (TFUN)CoToRat,            STATEMENT,    PARTEST}
