@@ -2001,6 +2001,23 @@ Topadic x;
 #require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert compile_error?("Illegal argument(s) in Topadic statement: 'x'")
 *--#] topadic_arg_error :
+*--#[ padictorat_error :
+#-
+Local F = 1;
+PadicToRat;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert compile_error?("Illegal attempt to convert from padic_ without activating p-adic numbers.")
+assert compile_error?("Forgotten #startpadic instruction?")
+*--#] padictorat_error :
+*--#[ padictorat_arg_error :
+#StartPadic 5,N=6
+Local F = 1;
+PadicToRat x;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert compile_error?("Illegal argument(s) in PadicToRat statement: 'x'")
+*--#] padictorat_arg_error :
 *--#[ startpadic_error_prime :
 #StartPadic 4,N=6
 .end
@@ -2075,6 +2092,40 @@ Print F;
 assert succeeded?
 assert result("F") =~ /padic_\(-?[0-9]+,6,/
 *--#] padic_topadic_twice :
+*--#[ padic_padictorat_basic :
+#-
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F = x*padic_(-1,6,1);
+Local G = x*padic_(1,6,1);
+PadicToRat;
+.sort
+Print F;
+Print G;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") !~ /padic_\(/
+assert result("F") =~ /(x\/5|1\/5\*x|x\*1\/5)/
+assert result("G") !~ /padic_\(/
+assert result("G") =~ /(5\*x|x\*5)/
+*--#] padic_padictorat_basic :
+*--#[ padic_padictorat_reconstruct :
+#-
+#StartPadic 7,N=10
+Format padicprecision off;
+Symbol a;
+Local F = a/3;
+ToPadic;
+PadicToRat;
+.sort
+Print F;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") =~ /(a\/3|1\/3\*a|a\*1\/3)/
+*--#] padic_padictorat_reconstruct :
 *--#[ padic_print_full :
 #-
 #StartPadic 5,N=6
