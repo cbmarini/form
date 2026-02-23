@@ -3990,6 +3990,10 @@ CommonEnd:
 					AT.WorkPointer = term + *term;
 					if ( ToPadic(BHEAD term,level) ) goto GenCall;
 					goto Return0;
+				  case TYPETOPADICTORAT:
+					AT.WorkPointer = term + *term;
+					if ( PadicToRat(BHEAD term,level) ) goto GenCall;
+					goto Return0;
 #endif
 				}
 				goto SkipCount;
