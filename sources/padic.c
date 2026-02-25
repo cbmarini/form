@@ -35,7 +35,9 @@
  *   with FORM.  If not, see <http://www.gnu.org/licenses/>.
  */
 /* #] License : */
-
+/*
+  	#[ Includes: padic.c
+*/
 #include "form3.h"
 #include <stdio.h>
 #include <string.h>
@@ -51,8 +53,6 @@
 #include <flint/padic.h>
 
 /*
-  	#[ Runtime state :
-
 	FORM keeps a single active p-adic context per run:
 	- prime p
 	- precision N
@@ -68,17 +68,17 @@
 	Thread-local aux storage. The pointer is stored in AT.padic_aux_.
 */
 typedef struct PADIC_AUX_ {
-	padic_t p1;
-	padic_t p2;
-	padic_t p3;
-	padic_t p4;
-	mpq_t q1;
-	mpz_t z1;
-	mpz_t z2;
+padic_t p1;
+padic_t p2;
+padic_t p3;
+padic_t p4;
+mpq_t q1;
+mpz_t z1;
+mpz_t z2;
 } PADIC_AUX;
 
 /*
-  	#] Runtime state :
+  	#] Includes : 
   	#[ Helpers :
  		#[ GetPadicAux :
 */
@@ -183,45 +183,9 @@ static void ClearPadicAuxForAllThreads(void)
 }
 /*
  		#] ClearPadicAuxForAllThreads :
- 		#[ WriteSmallArg :
-*/
-static WORD *WriteSmallArg(WORD *t, WORD value)
-{
-	*t++ = -SNUMBER;
-	*t++ = value;
-	return(t);
-}
-/*
- 		#] WriteSmallArg :
- 		#[ WriteLongArg :
-
-	Writes a signed LONG argument in either compact -SNUMBER form or as
-	a two-word long integer argument (same internal style used in float.c
-	for signed long exponents).
-*/
-static WORD *WriteLongArg(WORD *t, LONG value)
-{
-	ULONG x;
-	if ( value >= WORD_MIN_VALUE && value <= WORD_MAX_VALUE ) {
-		return(WriteSmallArg(t,(WORD)value));
-	}
-	x = ( value < 0 ) ? (ULONG)(-value) : (ULONG)value;
-	*t++ = ARGHEAD + 6;
-	*t++ = 0;
-	FILLARG(t);
-	*t++ = 6;
-	*t++ = (UWORD)x;
-	*t++ = (UWORD)(x >> BITSINWORD);
-	*t++ = 1;
-	*t++ = 0;
-	*t++ = (value < 0) ? -5 : 5;
-	return(t);
-}
-/*
- 		#] WriteLongArg :
  		#[ ReadLongArg :
 
-	Reads a signed LONG argument written by WriteLongArg.
+	Reads a signed LONG argument written by PackPadic.
 	Returns 0 on failure.
 */
 static WORD *ReadLongArg(WORD *t, LONG *value)
@@ -283,79 +247,9 @@ static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
 }
 /*
  		#] FormRatToMpq :
- 		#[ WriteMpzArg :
-*/
-static WORD *WriteMpzArg(WORD *t, mpz_t z, const char *who)
-{
-	LONG small;
-	int sign;
-	mpz_t zabs;
-	size_t count = 0;
-	UWORD *limbs = 0;
-	WORD nnum, i;
-
-	if ( mpz_fits_slong_p(z) ) {
-		small = (LONG)mpz_get_si(z);
-		if ( small >= WORD_MIN_VALUE && small <= WORD_MAX_VALUE ) {
-			return(WriteSmallArg(t,(WORD)small));
-		}
-	}
-
-	sign = mpz_sgn(z);
-	if ( sign == 0 ) return(WriteSmallArg(t,0));
-
-	mpz_init(zabs);
-	mpz_set(zabs,z);
-	if ( sign < 0 ) mpz_neg(zabs,zabs);
-
-	count = (size_t)((mpz_sizeinbase(zabs,2) + BITSINWORD - 1) / BITSINWORD);
-	if ( count > (size_t)WORD_MAX_VALUE ) {
-		mpz_clear(zabs);
-		MLOCK(ErrorMessageLock);
-		MesPrint("p-adic internal overflow in %s.",who);
-		MUNLOCK(ErrorMessageLock);
-		Terminate(-1);
-	}
-
-	limbs = (UWORD *)Malloc1(count*sizeof(UWORD),who);
-	if ( limbs == 0 ) {
-		mpz_clear(zabs);
-		MLOCK(ErrorMessageLock);
-		MesPrint("Fatal error in Malloc1 call in %s.",who);
-		MUNLOCK(ErrorMessageLock);
-		Terminate(-1);
-	}
-
-	mpz_export(limbs,&count,-1,sizeof(UWORD),0,0,zabs);
-	mpz_clear(zabs);
-	if ( count == 0 ) {
-		M_free(limbs,who);
-		return(WriteSmallArg(t,0));
-	}
-	if ( count > (size_t)WORD_MAX_VALUE ) {
-		M_free(limbs,who);
-		MLOCK(ErrorMessageLock);
-		MesPrint("p-adic internal overflow in %s.",who);
-		MUNLOCK(ErrorMessageLock);
-		Terminate(-1);
-	}
-
-	nnum = (WORD)count;
-	*t++ = ARGHEAD + 2*nnum + 2;
-	*t++ = 0;
-	FILLARG(t);
-	*t++ = 2*nnum + 2;
-	for ( i = 0; i < nnum; i++ ) *t++ = (WORD)limbs[i];
-	*t++ = 1;
-	for ( i = 1; i < nnum; i++ ) *t++ = 0;
-	*t++ = ( sign < 0 ) ? -(2*nnum+1) : (2*nnum+1);
-
-	M_free(limbs,who);
-	return(t);
-}
-/*
- 		#] WriteMpzArg :
  		#[ ReadMpzArg :
+
+	Reads an integer argument written by PackPadic.
 */
 static WORD *ReadMpzArg(WORD *f, WORD *fstop, mpz_t z)
 {
@@ -399,6 +293,7 @@ static void ContextMismatchError(LONG N)
 }
 /*
  		#] ContextMismatchError :
+  	#] Helpers :
   	#[ Internal p-adic function format :
  		#[ UnpackPadic :
 
@@ -448,34 +343,123 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 /*
  		#] UnpackPadic :
  		#[ PackPadic :
+
+	Packs a reduced FLINT p-adic value into FORM's internal representation:
+	    padic_(v,N,u)
+	where v and N are signed LONG arguments and u is a signed integer
+	argument encoded in the canonical FORM integer format.
 */
 static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 {
 	WORD *t;
-	LONG v, N;
+	LONG v, N, small;
+	ULONG x;
+	int sign;
+	size_t count = 0;
+	UWORD *limbs = 0;
+	WORD nnum, i;
 
+	/*
+		Normalize first so the serialized (v,N,u) triplet is canonical.
+	*/
 	padic_set(aux->p4,in,ActivePadicContext);
 	padic_reduce(aux->p4,ActivePadicContext);
 	v = (LONG)padic_val(aux->p4);
 	N = (LONG)padic_prec(aux->p4);
-
+	/*
+		Convert the FLINT unit to GMP once; packing below reads aux->z1.
+	*/
 	fmpz_get_mpz(aux->z1,padic_unit(aux->p4));
 
+	/*
+		Start the function record and then append the three arguments:
+		valuation v, precision N, and unit u.
+	*/
 	t = fun;
 	*t++ = PADICFUN;
 	t++;
 	FILLFUN(t);
 
-	t = WriteLongArg(t,v);
-	t = WriteLongArg(t,N);
-	t = WriteMpzArg(t,aux->z1,"PackPadic(unit)");
+	/*
+		Pack valuation v as signed LONG:
+		compact -SNUMBER when it fits in WORD, otherwise as a two-word
+		long integer argument (same encoding used for float_ exponents).
+	*/
+	if ( v >= WORD_MIN_VALUE && v <= WORD_MAX_VALUE ) {
+		*t++ = -SNUMBER;
+		*t++ = (WORD)v;
+	}
+	else {
+		x = ( v < 0 ) ? (ULONG)(-v) : (ULONG)v;
+		*t++ = ARGHEAD + 6;
+		*t++ = 0;
+		FILLARG(t);
+		*t++ = 6;
+		*t++ = (UWORD)x;
+		*t++ = (UWORD)(x >> BITSINWORD);
+		*t++ = 1;
+		*t++ = 0;
+		*t++ = (v < 0) ? -5 : 5;
+	}
+	/*
+		Pack precision N with the same signed LONG encoding.
+	*/
+	if ( N >= WORD_MIN_VALUE && N <= WORD_MAX_VALUE ) {
+		*t++ = -SNUMBER;
+		*t++ = (WORD)N;
+	}
+	else {
+		x = ( N < 0 ) ? (ULONG)(-N) : (ULONG)N;
+		*t++ = ARGHEAD + 6;
+		*t++ = 0;
+		FILLARG(t);
+		*t++ = 6;
+		*t++ = (UWORD)x;
+		*t++ = (UWORD)(x >> BITSINWORD);
+		*t++ = 1;
+		*t++ = 0;
+		*t++ = (N < 0) ? -5 : 5;
+	}
+	/*
+		Pack unit u from mpz:
+		use -SNUMBER for small values, otherwise emit the canonical
+		FORM long-integer argument representation.
+	*/
+	if ( mpz_fits_slong_p(aux->z1)
+	  && (small = (LONG)mpz_get_si(aux->z1),
+	      small >= WORD_MIN_VALUE && small <= WORD_MAX_VALUE) ) {
+		*t++ = -SNUMBER;
+		*t++ = (WORD)small;
+	}
+	else {
+		/*
+			Long integer form:
+			- header + payload length
+			- absolute-value limbs (least-significant limb first)
+			- denominator 1 (as FORM rational format)
+			- signed numerator length in the final slot
+		*/
+		sign = mpz_sgn(aux->z1);
+		count = (size_t)((mpz_sizeinbase(aux->z1,2) + BITSINWORD - 1) / BITSINWORD);
+		limbs = (UWORD *)Malloc1(count*sizeof(UWORD),"PackPadic(unit)");
+		mpz_export(limbs,&count,-1,sizeof(UWORD),0,0,aux->z1);
+		nnum = (WORD)count;
+		*t++ = ARGHEAD + 2*nnum + 2;
+		*t++ = 0;
+		FILLARG(t);
+		*t++ = 2*nnum + 2;
+		for ( i = 0; i < nnum; i++ ) *t++ = (WORD)limbs[i];
+		*t++ = 1;
+		for ( i = 1; i < nnum; i++ ) *t++ = 0;
+		*t++ = ( sign < 0 ) ? -(2*nnum+1) : (2*nnum+1);
+		M_free(limbs,"PackPadic(unit)");
+	}
 	fun[1] = t - fun;
 	return(fun[1]);
 }
 /*
  		#] PackPadic :
  		#] Internal p-adic function format :
-  	#] Helpers :
   	#[ Runtime lifecycle :
  		#[ PadicIsActive :
 */
