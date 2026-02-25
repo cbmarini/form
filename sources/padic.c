@@ -57,6 +57,10 @@
 	- prime p
 	- precision N
 	The context is configured by #StartPadic / #EndPadic.
+
+	Note: the internal `padic_` coefficient carrier does not store p itself.
+	The active `PadicPrime`/`ActivePadicContext` is assumed when unpacking and
+	operating on p-adic coefficients.
 */
 #define PadicRuntimeActive     AM.PadicRuntimeActive
 #define PadicContextInitialized AM.PadicContextInitialized
@@ -68,13 +72,21 @@
 	Thread-local aux storage. The pointer is stored in AT.padic_aux_.
 */
 typedef struct PADIC_AUX_ {
-padic_t p1;
-padic_t p2;
-padic_t p3;
-padic_t p4;
-mpq_t q1;
-mpz_t z1;
-mpz_t z2;
+	/*
+		All p-adic operations are done through this per-thread scratch space.
+		This avoids repeated init/clear churn while sorting/normalizing and keeps
+		GMP/FLINT temporaries thread-local.
+	*/
+	padic_t p1;
+	padic_t p2;
+	padic_t p3;
+	/* Used by PackPadic() to build a canonical (reduced) representation. */
+	padic_t p4;
+	/* Scratch rational used by FORM <-> padic/mpq conversions. */
+	mpq_t q1;
+	/* Scratch integers used by PackPadic()/UnpackPadic() and coefficient conversions. */
+	mpz_t z1;
+	mpz_t z2;
 } PADIC_AUX;
 
 /*
@@ -85,6 +97,10 @@ mpz_t z2;
 static PADIC_AUX *GetPadicAux(void)
 {
 	GETIDENTITY
+	/*
+		AT.padic_aux_ is allocated by StartPadicSystem() for all threads.
+		When p-adics are not active this pointer is 0.
+	*/
 	return (PADIC_AUX *)(AT.padic_aux_);
 }
 /*
@@ -124,6 +140,10 @@ static int AllocatePadicAuxForAllThreads(void)
 #ifdef WITHPTHREADS
 	int id, totnum;
 
+	/*
+		Allocate for all regular threads; when sortbots are enabled they may
+		also call into p-adic code paths, so allocate for them as well.
+	*/
 	totnum = AM.totalnumberofthreads;
 #ifdef WITHSORTBOTS
 	totnum = MaX(2 * AM.totalnumberofthreads - 3, AM.totalnumberofthreads);
@@ -142,6 +162,9 @@ static int AllocatePadicAuxForAllThreads(void)
 	}
 #else
 	PADIC_AUX *aux;
+	/*
+		Single-thread build: AT.padic_aux_ is the only instance.
+	*/
 	if ( AT.padic_aux_ ) {
 		ClearPadicAux((PADIC_AUX *)(AT.padic_aux_));
 		M_free(AT.padic_aux_,"AT.padic_aux_");
@@ -162,6 +185,9 @@ static void ClearPadicAuxForAllThreads(void)
 {
 #ifdef WITHPTHREADS
 	int id, totnum;
+	/*
+		Mirror the allocation logic in AllocatePadicAuxForAllThreads().
+	*/
 	totnum = AM.totalnumberofthreads;
 #ifdef WITHSORTBOTS
 	totnum = MaX(2 * AM.totalnumberofthreads - 3, AM.totalnumberofthreads);
@@ -186,6 +212,12 @@ static void ClearPadicAuxForAllThreads(void)
  		#[ ReadLongArg :
 
 	Reads a signed LONG argument written by PackPadic.
+
+	Encoding used by PackPadic:
+	- small value: `-SNUMBER, value`
+	- otherwise: a fixed-size long-integer argument (`ARGHEAD+6`) containing the
+	  2-word absolute value (little-endian), denominator 1, and a sign code in
+	  the last slot (same internal layout used for float_ exponents).
 	Returns 0 on failure.
 */
 static WORD *ReadLongArg(WORD *t, LONG *value)
@@ -194,12 +226,15 @@ static WORD *ReadLongArg(WORD *t, LONG *value)
 		*value = (LONG)t[1];
 		return(t+2);
 	}
+	/* Long-argument encoding: fixed record size with sign code +/-5. */
 	if ( *t == ARGHEAD+6
 	 && ABS(t[ARGHEAD+5]) == 5
 	 && t[ARGHEAD+3] == 1
 	 && t[ARGHEAD+4] == 0 ) {
+		/* Reconstruct the 2-limb absolute value as x = hi*2^BITSINWORD + lo. */
 		ULONG x = ((ULONG)(UWORD)t[ARGHEAD+2] << BITSINWORD) + (UWORD)t[ARGHEAD+1];
 		*value = (t[ARGHEAD+5] < 0) ? -(LONG)x : (LONG)x;
+		/* Skip the complete argument record. */
 		return(t + *t);
 	}
 	return(0);
@@ -208,8 +243,15 @@ static WORD *ReadLongArg(WORD *t, LONG *value)
  		#] ReadLongArg :
  		#[ FormRatToMpq :
 
-	Converts the internal Form coefficient representation (formrat/ratsize)
+	Converts the internal FORM rational coefficient encoding (formrat/ratsize)
 	to a GMP rational.
+
+	The coefficient format is:
+	- ratsize is a signed length code of the form +/- (2*n+1)
+	- formrat[0..n-1] holds |numerator| as base-2^BITSINWORD limbs
+	- formrat[n..2*n-1] holds denominator limbs (padded)
+	- the sign of the rational is carried in the sign of ratsize
+	- the final slot formrat[2*n] stores ABS(ratsize)
 */
 static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
 {
@@ -228,6 +270,7 @@ static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
 	nnum = nden = (ratsize-1)/2;
 	num = formrat;
 	den = formrat + nnum;
+	/* Trim leading zero limbs (FORM coefficients are padded). */
 	while ( nnum > 0 && num[nnum-1] == 0 ) nnum--;
 	while ( nden > 0 && den[nden-1] == 0 ) nden--;
 
@@ -250,6 +293,14 @@ static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
  		#[ ReadMpzArg :
 
 	Reads an integer argument written by PackPadic.
+
+	The integer argument is stored either as:
+	- small: `-SNUMBER, value`
+	- long: canonical FORM long integer argument, encoded as a rational num/1:
+	  - header length is `ARGHEAD + 2*nnum + 2`
+	  - numerator occupies nnum limbs (little-endian)
+	  - denominator is exactly 1
+	  - the last word stores +/- (2*nnum+1) as sign/size code
 */
 static WORD *ReadMpzArg(WORD *f, WORD *fstop, mpz_t z)
 {
@@ -263,12 +314,14 @@ static WORD *ReadMpzArg(WORD *f, WORD *fstop, mpz_t z)
 
 	if ( *f <= 0 || f + *f > fstop ) return(0);
 	signcode = f[*f-1];
+	/* The final word encodes sign and numerator size: +/- (2*nnum+1). */
 	if ( signcode == 0 ) return(0);
 	nnum = (WORD)((ABS(signcode)-1)/2);
 	if ( nnum <= 0 ) return(0);
 	if ( ABS(signcode) != 2*nnum + 1 ) return(0);
 	if ( *f != ARGHEAD + 2*nnum + 2 ) return(0);
 	if ( f[ARGHEAD] != 2*nnum + 2 ) return(0);
+	/* Denominator must be exactly 1, padded with zeros to nnum limbs. */
 	if ( f[ARGHEAD+1+nnum] != 1 ) return(0);
 	for ( i = 1; i < nnum; i++ ) {
 		if ( f[ARGHEAD+1+nnum+i] != 0 ) return(0);
@@ -297,12 +350,16 @@ static void ContextMismatchError(LONG N)
   	#[ Internal p-adic function format :
  		#[ UnpackPadic :
 
-	The internal `padic_` representation stores the FLINT triplet (u,v,N):
+		The internal `padic_` representation stores the FLINT triplet (u,v,N):
 
-	  padic_(v, N, u)
+		  padic_(v, N, u)
 
 	where u is encoded as a normal Form integer argument (either -SNUMBER
 	or a long integer n/1 argument, exactly as in float_ limb packing).
+
+	The prime p is not stored in the function: unpacking assumes the currently
+	active p-adic context (configured by %#StartPadic) and only checks that the
+	precision N matches.
 */
 static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 {
@@ -319,6 +376,9 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 
 	if ( TestPadic(fun) == 0 ) return(-1);
 
+	/*
+		Read the argument triplet in order: v, N, u.
+	*/
 	f = fun + FUNHEAD;
 	fstop = fun + fun[1];
 
@@ -377,7 +437,7 @@ static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 	*/
 	t = fun;
 	*t++ = PADICFUN;
-	t++;
+	t++; /* fun[1] (function length) is filled at the end. */
 	FILLFUN(t);
 
 	/*
@@ -442,6 +502,7 @@ static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 		sign = mpz_sgn(aux->z1);
 		count = (size_t)((mpz_sizeinbase(aux->z1,2) + BITSINWORD - 1) / BITSINWORD);
 		limbs = (UWORD *)Malloc1(count*sizeof(UWORD),"PackPadic(unit)");
+		/* mpz_export ignores the sign; we store it separately in 'sign'. */
 		mpz_export(limbs,&count,-1,sizeof(UWORD),0,0,aux->z1);
 		nnum = (WORD)count;
 		*t++ = ARGHEAD + 2*nnum + 2;
@@ -485,6 +546,14 @@ int PadicIsPrime(LONG p)
 /*
  		#] PadicIsPrime :
  		#[ StartPadicSystem :
+
+	Initializes (or reinitializes) the single global p-adic context for this run.
+	Called by %#StartPadic from the preprocessor.
+
+	This function:
+	- clears the previous context if active,
+	- initializes FLINT's padic_ctx_struct for (p,N),
+	- allocates per-thread scratch objects (AT.padic_aux_ / AB[id]->T.padic_aux_).
 */
 int StartPadicSystem(LONG p, LONG N)
 {
@@ -522,6 +591,11 @@ int StartPadicSystem(LONG p, LONG N)
 /*
  		#] StartPadicSystem :
  		#[ ClearPadicSystem :
+
+	Releases all runtime state associated with p-adic arithmetic, including:
+	- per-thread aux buffers,
+	- the FLINT context,
+	- cached print buffer AO.padicspace.
 */
 void ClearPadicSystem(void)
 {
@@ -548,6 +622,12 @@ void ClearPadicSystem(void)
   	#] Runtime lifecycle :
   	#[ Validation and conversion :
  		#[ TestPadic :
+
+	Checks whether `fun` has the shape of a well-formed internal padic_ record:
+	    padic_(v,N,u)
+	with v and N stored as signed LONG arguments and u as a canonical FORM
+	integer argument. This routine does not check that N matches the active
+	context; UnpackPadic() performs that check.
 */
 int TestPadic(WORD *fun)
 {
@@ -579,6 +659,9 @@ int TestPadic(WORD *fun)
 /*
  		#] TestPadic :
  		#[ RatToPadicFun :
+
+	Converts a FORM rational coefficient (formrat/nrat) to a `padic_` function
+	record written at outfun.
 */
 int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 {
@@ -594,6 +677,10 @@ int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 /*
  		#] RatToPadicFun :
  		#[ MulRatToPadic :
+
+	Multiplies an existing `padic_` coefficient by a FORM rational coefficient.
+	This is used by Normalize() when a term contains both a numeric coefficient
+	and a `padic_` function.
 */
 int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 {
@@ -611,6 +698,9 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 /*
  		#] MulRatToPadic :
  		#[ MulPadics :
+
+	Multiplies two internal `padic_` function records and stores the product
+	as a new `padic_` record in fun3.
 */
 int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
@@ -627,6 +717,9 @@ int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 /*
  		#] MulPadics :
  		#[ DivPadics :
+
+	Divides two internal `padic_` records (fun1 / fun2). Division by zero is
+	a fatal runtime error, matching FORM's behavior for coefficient arithmetic.
 */
 int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
@@ -650,6 +743,11 @@ int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 /*
  		#] DivPadics :
  		#[ MpqToFormRat :
+
+	Converts a GMP rational to FORM's internal rational coefficient encoding.
+
+	If out is 0, this routine only computes the signed size code in *nratout.
+	Returns -1 when the result does not fit in FORM's encoding bounds.
 */
 static int MpqToFormRat(UWORD *out, WORD *nratout, mpq_t q)
 {
@@ -701,9 +799,13 @@ static int MpqToFormRat(UWORD *out, WORD *nratout, mpq_t q)
  		#] MpqToFormRat :
  		#[ PadicReconstructToMpq :
 
-	Reconstructs a small rational from a reduced p-adic value using FLINT's
-	rational reconstruction and applies the p-adic valuation afterwards.
-*/
+		Reconstructs a small rational from a reduced p-adic value using FLINT's
+		rational reconstruction and applies the p-adic valuation afterwards.
+
+		This is a "best effort" conversion used by PadicToRat(): if reconstruction
+		fails (not unique for the current modulus), the caller can fall back to a
+		canonical lift via padic_get_mpq().
+ */
 static int PadicReconstructToMpq(mpq_t out, padic_t in)
 {
 	fmpz_t residue, modulus, ppower;
@@ -749,6 +851,12 @@ ClearAndReturn:
   	#] Validation and conversion :
   	#[ Printing :
  		#[ PrintPadic :
+
+	Formats a padic_ coefficient for printing.
+
+	The resulting C string is stored (with surrounding parentheses) in
+	AO.padicspace and the return value is the string length. FORM's print
+	backend reads AO.padicspace after this call.
 */
 int PrintPadic(WORD *fun,int numdigits)
 {
@@ -821,6 +929,10 @@ int PrintPadic(WORD *fun,int numdigits)
   	#] Printing :
   	#[ Compiler/runtime statements :
  		#[ CoToPadic :
+
+	Compiler front-end for the `ToPadic;` statement.
+	This only validates syntax and records the action; the actual conversion is
+	performed on terms at execution time by ToPadic().
 */
 int CoToPadic(UBYTE *s)
 {
@@ -840,6 +952,9 @@ int CoToPadic(UBYTE *s)
 /*
  		#] CoToPadic :
  		#[ CoPadicToRat :
+
+	Compiler front-end for the `PadicToRat;` statement.
+	The runtime action is implemented by PadicToRat().
 */
 int CoPadicToRat(UBYTE *s)
 {
@@ -859,6 +974,13 @@ int CoPadicToRat(UBYTE *s)
 /*
  		#] CoPadicToRat :
  		#[ ToPadic :
+
+	Runtime implementation of `ToPadic;`.
+
+	This replaces the current term coefficient by an explicit `padic_` function
+	record and resets the coefficient to 1/1 (the sign is absorbed into the
+	p-adic value). If the coefficient is already +/-1 and the term already ends
+	with a proper padic_ record, the statement is effectively a no-op.
 */
 int ToPadic(PHEAD WORD *term, WORD level)
 {
@@ -871,24 +993,29 @@ int ToPadic(PHEAD WORD *term, WORD level)
 	if ( aux == 0 ) return(1);
 
 	t = term + *term;
-	ncoef = t[-1];
-	nsize = ABS(ncoef);
-	tstop = t - nsize;
+	ncoef = t[-1];          /* signed length code of the coefficient */
+	nsize = ABS(ncoef);     /* number of WORDs occupied by the coefficient */
+	tstop = t - nsize;      /* points to the start of the coefficient */
 
 	if ( nsize == 3 && tstop[0] == 1 && tstop[1] == 1 ) {
+		/*
+			The coefficient is +/-1. If there is already a single proper padic_
+			record as the last commuting function, we are done.
+		*/
 		scan = term + 1;
 		while ( scan < tstop ) {
 			if ( *scan == PADICFUN && scan + scan[1] == tstop && TestPadic(scan) ) {
 				return(Generator(BHEAD term,level));
 			}
-			scan += scan[1];
+			scan += scan[1]; /* advance to the next function in the term */
 		}
 	}
 
 	FormRatToMpq(aux->q1,(UWORD *)tstop,ncoef);
 	padic_set_mpq(aux->p1,aux->q1,ActivePadicContext);
+	/* Overwrite the coefficient slot with padic_(v,N,u) and append 1/1. */
 	PackPadic(aux,tstop,aux->p1);
-	tstop += tstop[1];
+	tstop += tstop[1]; /* advance past the newly written padic_ record */
 	*tstop++ = 1;
 	*tstop++ = 1;
 	*tstop++ = 3;
@@ -899,6 +1026,12 @@ int ToPadic(PHEAD WORD *term, WORD level)
 /*
  		#] ToPadic :
  		#[ PadicToRat :
+
+	Runtime implementation of `PadicToRat;`.
+
+	This finds a terminal `padic_` coefficient record and converts it back to a
+	FORM rational coefficient. The conversion first tries rational reconstruction
+	(to keep results small) and otherwise falls back to a canonical lift.
 */
 int PadicToRat(PHEAD WORD *term, WORD level)
 {
@@ -915,6 +1048,10 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 	nsign = tstop[-1] < 0 ? -1 : 1;
 	tstop -= nsize;
 	t = term + 1;
+	/*
+		The term must end in a single proper padic_ record, followed by a unit
+		coefficient 1/1 (the sign is carried separately in tstop[-1]).
+	*/
 	while ( t < tstop ) {
 		if ( *t == PADICFUN && t + t[1] == tstop && TestPadic(t)
 		 && nsize == 3 && tstop[0] == 1 && tstop[1] == 1 ) break;
@@ -960,6 +1097,19 @@ RatFailure:
   	#] Compiler/runtime statements :
   	#[ Sorting :
  		#[ AddWithPadic :
+
+	Sort helper used when two otherwise identical terms differ only in their
+	coefficient and that coefficient involves padic_.
+
+	Compare1() in sort.c sets AT.SortPadicMode to indicate which term(s) carry a
+	padic_ coefficient record:
+	- 3: both terms end with a proper padic_ record
+	- 1: only *ps1 has padic_, *ps2 has a rational coefficient
+	- 2: only *ps2 has padic_, *ps1 has a rational coefficient
+
+	AddWithPadic computes the p-adic sum and rewrites *ps1 to contain exactly one
+	padic_ record and a unit coefficient 1/1. It tries to reuse term space in
+	place and otherwise allocates in the sort buffer.
 */
 int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 {
@@ -978,6 +1128,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 	coef2 = s2 + *s2; size2 = coef2[-1]; coef2 -= ABS(size2);
 
 	if ( AT.SortPadicMode == 3 ) {
+		/* Both coefficients are padic_: unpack and apply external +/- sign. */
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		UnpackPadic(aux,aux->p1,fun1);
@@ -986,6 +1137,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,ActivePadicContext);
 	}
 	else if ( AT.SortPadicMode == 1 ) {
+		/* First coefficient is padic_, second is rational. */
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		UnpackPadic(aux,aux->p1,fun1);
 		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,ActivePadicContext);
@@ -993,6 +1145,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		padic_set_mpq(aux->p2,aux->q1,ActivePadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
+		/* Second coefficient is padic_, first is rational. */
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		UnpackPadic(aux,aux->p2,fun2);
 		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,ActivePadicContext);
@@ -1009,6 +1162,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 
 	padic_add(aux->p3,aux->p1,aux->p2,ActivePadicContext);
 	if ( padic_is_zero(aux->p3) ) {
+		/* Terms cancel. */
 		*ps1 = *ps2 = 0;
 		AT.SortPadicMode = 0;
 		return(0);
@@ -1018,6 +1172,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 	PackPadic(aux,fun3,aux->p3);
 
 	if ( AT.SortPadicMode == 3 ) {
+		/* Prefer overwriting an existing padic_ record in-place if it fits. */
 		if ( fun1[1] == fun3[1] ) {
 Over1:
 			i = fun3[1]; t1 = fun1; t2 = fun3; NCOPY(t1,t2,i);
@@ -1043,8 +1198,10 @@ Over2:
 	}
 
 	jj = fun1-s1;
+	/* Required space: prefix + padic_ record + coefficient words (1,1,3). */
 	j = jj+fun3[1]+3;
 	if ( (S->sFill + j) >= S->sTop2 ) {
+		/* Make space in the sort buffer and refresh pointers. */
 		GarbHand();
 		s1 = *ps1;
 		fun1 = s1+jj;
@@ -1071,8 +1228,12 @@ Finished:
 	return(1);
 }
 /*
- 		#] AddWithPadic :
- 		#[ MergeWithPadic :
+  		#] AddWithPadic :
+  		#[ MergeWithPadic :
+
+	Variant of AddWithPadic used during patch merging: it computes the p-adic sum
+	and rewrites term1 in-place if possible, otherwise it shifts/overwrites
+	memory so that *interm1 points to the updated term.
 */
 int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 {
@@ -1125,32 +1286,35 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 
 	fun3 = TermMalloc("MergeWithPadic");
 	PackPadic(aux,fun3,aux->p3);
-	if ( AT.SortPadicMode == 3 ) {
-		if ( fun1[1] + ABS(size1) == fun3[1] + 3 ) {
+		if ( AT.SortPadicMode == 3 ) {
+			if ( fun1[1] + ABS(size1) == fun3[1] + 3 ) {
 OnTopOf1:
-			t1 = fun3; t2 = fun1;
-			for ( i = 0; i < fun3[1]; i++ ) *t2++ = *t1++;
-			*t2++ = 1; *t2++ = 1; *t2++ = 3;
-			retval = 1;
-		}
-		else if ( fun1[1] + ABS(size1) > fun3[1] + 3 ) {
+				/* The new (padic_ + 1/1) fits exactly on top of the old suffix. */
+				t1 = fun3; t2 = fun1;
+				for ( i = 0; i < fun3[1]; i++ ) *t2++ = *t1++;
+				*t2++ = 1; *t2++ = 1; *t2++ = 3;
+				retval = 1;
+			}
+			else if ( fun1[1] + ABS(size1) > fun3[1] + 3 ) {
 Shift1:
-			t2 = term1 + *term1; tt = t2;
-			*--t2 = 3; *--t2 = 1; *--t2 = 1;
-			t1 = fun3 + fun3[1];
-			for ( i = 0; i < fun3[1]; i++ ) *--t2 = *--t1;
+				/* There is slack in term1; shift the tail down and rewrite in place. */
+				t2 = term1 + *term1; tt = t2;
+				*--t2 = 3; *--t2 = 1; *--t2 = 1;
+				t1 = fun3 + fun3[1];
+				for ( i = 0; i < fun3[1]; i++ ) *--t2 = *--t1;
 			t1 = fun1;
 			while ( t1 > term1 ) *--t2 = *--t1;
 			*t2 = tt-t2; term1 = t2;
 			retval = 1;
-		}
-		else {
-			jj = fun3[1]-fun1[1]+3-ABS(size1);
+			}
+			else {
+				jj = fun3[1]-fun1[1]+3-ABS(size1);
 Over1:
-			t2 = term1-jj; t1 = term1;
-			while ( t1 < fun1 ) *t2++ = *t1++;
-			term1 -= jj;
-			*term1 += jj;
+				/* term1 needs to grow: move the start pointer back by jj words. */
+				t2 = term1-jj; t1 = term1;
+				while ( t1 < fun1 ) *t2++ = *t1++;
+				term1 -= jj;
+				*term1 += jj;
 			for ( i = 0; i < fun3[1]; i++ ) *t2++ = fun3[i];
 			*t2++ = 1; *t2++ = 1; *t2++ = 3;
 			retval = 1;
