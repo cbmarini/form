@@ -2140,6 +2140,23 @@ Print F;
 assert succeeded?
 assert result("F") !~ /O\(5\^/
 *--#] padic_print_full :
+*--#[ padic_print_list_format :
+#-
+#StartPadic 5,N=6
+Format padicformat list;
+Format padicprecision 3;
+Local F = 194;
+Local G = padic_(0,6,0);
+Topadic;
+.sort
+Print F;
+Print G;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") =~ /padic\[5,0,6,\{4,3,2\}\]/
+assert result("G") =~ /padic\[5,0,6,\{0\}\]/
+*--#] padic_print_list_format :
 *--#[ padic_mulrat_mulpadics :
 #-
 #StartPadic 5,N=6

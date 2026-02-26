@@ -2423,6 +2423,7 @@ struct O_const {
 #endif
 #ifdef WITHPADIC
     int     PadicPrec;
+    int     PadicFormat;
 #endif
     WORD    schemenum;             /* for feeding a Horner scheme to Optimize */
     WORD    transFlag;             /* ()  >0 indicates that translations have to be done */

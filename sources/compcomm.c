@@ -59,6 +59,7 @@ static KEYWORD formatoptions[] = {
 	,{"normal",			(TFUN)0,	NORMALFORMAT,		1}
 	,{"nospaces",		(TFUN)0,	NOSPACEFORMAT,		3}
 #ifdef WITHPADIC
+	,{"padicformat",	(TFUN)0,	0,					7}
 	,{"padicprecision",	(TFUN)0,	0,					6}
 #endif
 	,{"pfortran",		(TFUN)0,	PFORTRANMODE,		0}
@@ -443,6 +444,44 @@ WrongOption:		MesPrint("&Illegal option in Format FloatPrecision: %s",s);
 				else {
 WrongPadicOption:
 					MesPrint("&Illegal option in Format PadicPrecision: %s",s);
+					error = 1;
+				}
+			}
+			else if ( key->flags == 7 ) {
+/*
+				Syntax: Format PadicFormat [series|list];
+*/
+				UBYTE c;
+				UBYTE *start;
+				int ok = 1;
+				while ( FG.cTable[*s] == 0 ) s++;
+				while ( *s == ' ' || *s == '\t' || *s == ',' ) s++;
+				start = s;
+				if ( *s == 0 ) {
+					AO.PadicFormat = PADICPRINTSERIES;
+				}
+				else {
+					ss = s;
+					while ( *s && *s != ' ' && *s != '\t' && *s != ',' ) s++;
+					c = *s;
+					*s = 0;
+					if ( StrICmp(ss,(UBYTE *)"series") == 0 ) {
+						AO.PadicFormat = PADICPRINTSERIES;
+					}
+					else if ( StrICmp(ss,(UBYTE *)"list") == 0 ) {
+						AO.PadicFormat = PADICPRINTLIST;
+					}
+					else {
+						ok = 0;
+					}
+					*s = c;
+					if ( ok ) {
+						while ( *s == ' ' || *s == '\t' || *s == ',' ) s++;
+						if ( *s ) ok = 0;
+					}
+				}
+				if ( ok == 0 ) {
+					MesPrint("&Illegal option in Format PadicFormat: %s",start);
 					error = 1;
 				}
 			}

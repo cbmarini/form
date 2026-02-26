@@ -1354,6 +1354,7 @@ void StartVariables(void)
 	AM.PadicRuntimeActive = 0;
 	AM.PadicContextInitialized = 0;
 	AM.PadicContext = 0;
+	AO.PadicFormat = PADICPRINTSERIES;
 #endif
 	AC.CommuteInSet = 0;
 
