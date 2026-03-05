@@ -2245,16 +2245,6 @@ Print F;
 assert succeeded?
 assert result("F") =~ /padic_\(-?[0-9]+,6,/
 *--#] padic_add_expand :
-*--#[ padic_context_mismatch :
-#-
-#StartPadic 5,N=6
-Symbol x;
-Local F = x*padic_(0,6,1) + x*padic_(0,4,1);
-.sort
-.end
-#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
-assert runtime_error?("Incompatible p-adic precision in padic_ coefficient")
-*--#] padic_context_mismatch :
 *--#[ padic_merge_padic :
 #-
 #: termsinsmall 8

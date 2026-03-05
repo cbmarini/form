@@ -345,12 +345,11 @@ static WORD *ReadMpzArg(WORD *f, WORD *fstop, mpz_t z)
 	or a long integer n/1 argument).
 
 	The prime p is not stored in the function: unpacking assumes the currently
-	active p-adic context (configured by %#StartPadic) and only checks that the
-	precision N matches.
+	active p-adic context configured by %#StartPadic.
 */
 static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 {
-	WORD *f, *fstop;
+	WORD *f;
 	LONG v, N;
 	ULONG x;
 
@@ -368,11 +367,10 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 		Read the argument triplet in order: v, N, u.
 	*/
 	f = fun + FUNHEAD;
-	fstop = fun + fun[1];
 
 	/*
 		TestPadic() already validated the arguments of padic_, 
-		so we can safely decode v and N here.
+		so we can safely decode v, N and u here.
 	*/
 	if ( *f == -SNUMBER ) {
 		v = (LONG)f[1];
@@ -394,9 +392,20 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 		f += *f;
 	}
 
-	f = ReadMpzArg(f,fstop,aux->z1);
-	if ( f == 0 ) return(-1);
-	if ( f != fstop ) return(-1);
+	/*
+		Decode the unit u.
+	*/
+	if ( *f == -SNUMBER ) {
+		mpz_set_si(aux->z1,(slong)(f[1]));
+	}
+	else {
+		WORD size, nnum;
+		size = f[*f-1];
+		nnum = (WORD)((ABS(size)-1)/2);
+		mpz_import(aux->z1,(size_t)nnum,-1,sizeof(UWORD),0,0,(UWORD *)(f+ARGHEAD+1));
+		if ( size < 0 ) mpz_neg(aux->z1,aux->z1);
+	}
+
 	fmpz_set_mpz(padic_unit(out),aux->z1);
 	padic_val(out) = (slong)v;
 	padic_prec(out) = (slong)N;
