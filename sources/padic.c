@@ -333,19 +333,6 @@ static WORD *ReadMpzArg(WORD *f, WORD *fstop, mpz_t z)
 }
 /*
  		#] ReadMpzArg :
- 		#[ ContextMismatchError :
-*/
-static void ContextMismatchError(LONG N)
-{
-	MLOCK(ErrorMessageLock);
-	MesPrint("Incompatible p-adic precision in padic_ coefficient: found N=%l, active context uses p=%l, N=%l.",
-		N,PadicPrime,PadicPrecision);
-	MesPrint("Use %#StartPadic with matching parameters before combining these terms.");
-	MUNLOCK(ErrorMessageLock);
-	Terminate(-1);
-}
-/*
- 		#] ContextMismatchError :
   	#] Helpers :
   	#[ Internal p-adic function format :
  		#[ UnpackPadic :
@@ -355,7 +342,7 @@ static void ContextMismatchError(LONG N)
 		  padic_(v, N, u)
 
 	where u is encoded as a normal Form integer argument (either -SNUMBER
-	or a long integer n/1 argument, exactly as in float_ limb packing).
+	or a long integer n/1 argument).
 
 	The prime p is not stored in the function: unpacking assumes the currently
 	active p-adic context (configured by %#StartPadic) and only checks that the
@@ -365,6 +352,7 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 {
 	WORD *f, *fstop;
 	LONG v, N;
+	ULONG x;
 
 	if ( !PadicRuntimeActive || !PadicContextInitialized ) {
 		MLOCK(ErrorMessageLock);
@@ -382,13 +370,28 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 	f = fun + FUNHEAD;
 	fstop = fun + fun[1];
 
-	f = ReadLongArg(f,&v);
-	if ( f == 0 ) return(-1);
-	f = ReadLongArg(f,&N);
-	if ( f == 0 ) return(-1);
-	if ( N != PadicPrecision ) {
-		ContextMismatchError(N);
-		return(-1);
+	/*
+		TestPadic() already validated the arguments of padic_, 
+		so we can safely decode v and N here.
+	*/
+	if ( *f == -SNUMBER ) {
+		v = (LONG)f[1];
+		f += 2;
+	}
+	else {
+		x = ((ULONG)(UWORD)f[ARGHEAD+2] << BITSINWORD) + (UWORD)f[ARGHEAD+1];
+		v = (f[ARGHEAD+5] < 0) ? -(LONG)x : (LONG)x;
+		f += *f;
+	}
+
+	if ( *f == -SNUMBER ) {
+		N = (LONG)f[1];
+		f += 2;
+	}
+	else {
+		x = ((ULONG)(UWORD)f[ARGHEAD+2] << BITSINWORD) + (UWORD)f[ARGHEAD+1];
+		N = (f[ARGHEAD+5] < 0) ? -(LONG)x : (LONG)x;
+		f += *f;
 	}
 
 	f = ReadMpzArg(f,fstop,aux->z1);
