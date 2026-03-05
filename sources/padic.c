@@ -209,38 +209,6 @@ static void ClearPadicAuxForAllThreads(void)
 }
 /*
  		#] ClearPadicAuxForAllThreads :
- 		#[ ReadLongArg :
-
-	Reads a signed LONG argument written by PackPadic.
-
-	Encoding used by PackPadic:
-	- small value: `-SNUMBER, value`
-	- otherwise: a fixed-size long-integer argument (`ARGHEAD+6`) containing the
-	  2-word absolute value (little-endian), denominator 1, and a sign code in
-	  the last slot (same internal layout used for float_ exponents).
-	Returns 0 on failure.
-*/
-static WORD *ReadLongArg(WORD *t, LONG *value)
-{
-	if ( *t == -SNUMBER ) {
-		*value = (LONG)t[1];
-		return(t+2);
-	}
-	/* Long-argument encoding: fixed record size with sign code +/-5. */
-	if ( *t == ARGHEAD+6
-	 && ABS(t[ARGHEAD+5]) == 5
-	 && t[ARGHEAD+3] == 1
-	 && t[ARGHEAD+4] == 0 ) {
-		/* Reconstruct the 2-limb absolute value as x = hi*2^BITSINWORD + lo. */
-		ULONG x = ((ULONG)(UWORD)t[ARGHEAD+2] << BITSINWORD) + (UWORD)t[ARGHEAD+1];
-		*value = (t[ARGHEAD+5] < 0) ? -(LONG)x : (LONG)x;
-		/* Skip the complete argument record. */
-		return(t + *t);
-	}
-	return(0);
-}
-/*
- 		#] ReadLongArg :
  		#[ FormRatToMpq :
 
 	Converts the internal FORM rational coefficient encoding (formrat/ratsize)
@@ -290,51 +258,86 @@ static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
 }
 /*
  		#] FormRatToMpq :
- 		#[ ReadMpzArg :
-
-	Reads an integer argument written by PackPadic.
-
-	The integer argument is stored either as:
-	- small: `-SNUMBER, value`
-	- long: canonical FORM long integer argument, encoded as a rational num/1:
-	  - header length is `ARGHEAD + 2*nnum + 2`
-	  - numerator occupies nnum limbs (little-endian)
-	  - denominator is exactly 1
-	  - the last word stores +/- (2*nnum+1) as sign/size code
-*/
-static WORD *ReadMpzArg(WORD *f, WORD *fstop, mpz_t z)
-{
-	WORD nnum, i, signcode;
-	if ( f >= fstop ) return(0);
-
-	if ( *f == -SNUMBER ) {
-		mpz_set_si(z,(slong)(f[1]));
-		return(f+2);
-	}
-
-	if ( *f <= 0 || f + *f > fstop ) return(0);
-	signcode = f[*f-1];
-	/* The final word encodes sign and numerator size: +/- (2*nnum+1). */
-	if ( signcode == 0 ) return(0);
-	nnum = (WORD)((ABS(signcode)-1)/2);
-	if ( nnum <= 0 ) return(0);
-	if ( ABS(signcode) != 2*nnum + 1 ) return(0);
-	if ( *f != ARGHEAD + 2*nnum + 2 ) return(0);
-	if ( f[ARGHEAD] != 2*nnum + 2 ) return(0);
-	/* Denominator must be exactly 1, padded with zeros to nnum limbs. */
-	if ( f[ARGHEAD+1+nnum] != 1 ) return(0);
-	for ( i = 1; i < nnum; i++ ) {
-		if ( f[ARGHEAD+1+nnum+i] != 0 ) return(0);
-	}
-
-	mpz_import(z,(size_t)nnum,-1,sizeof(UWORD),0,0,(UWORD *)(f+ARGHEAD+1));
-	if ( signcode < 0 ) mpz_neg(z,z);
-	return(f + *f);
-}
-/*
- 		#] ReadMpzArg :
   	#] Helpers :
   	#[ Internal p-adic function format :
+ 		#[ TestPadic :
+
+	Checks whether `fun` has the shape of a well-formed internal padic_ record:
+	    padic_(v,N,u)
+	with v and N stored as signed LONG arguments and u as a canonical FORM
+	integer argument.
+*/
+int TestPadic(WORD *fun)
+{
+	WORD *f, *fstop;
+	WORD nargs, size, nnum, i;
+	LONG N;
+	ULONG x;
+
+	f = fun + FUNHEAD;
+	fstop = fun + fun[1];
+	nargs = 0;
+	while ( f < fstop ) {
+		nargs++;
+		NEXTARG(f);
+	}
+	if ( nargs != 3 ) return(0);
+
+	f = fun + FUNHEAD;
+	/* v: signed LONG argument (small or ARGHEAD+6 long form). */
+	if ( *f == -SNUMBER ) {
+		f += 2;
+	}
+	else {
+		if ( *f != ARGHEAD+6 ) return(0);
+		if ( ABS(f[ARGHEAD+5]) != 5 ) return(0);
+		if ( f[ARGHEAD+3] != 1 ) return(0);
+		if ( f[ARGHEAD+4] != 0 ) return(0);
+		f += *f;
+	}
+	/* N: same encoding; additionally require positive precision. */
+	if ( *f == -SNUMBER ) {
+		N = (LONG)f[1];
+		f += 2;
+	}
+	else {
+		if ( *f != ARGHEAD+6 ) return(0);
+		if ( ABS(f[ARGHEAD+5]) != 5 ) return(0);
+		if ( f[ARGHEAD+3] != 1 ) return(0);
+		if ( f[ARGHEAD+4] != 0 ) return(0);
+		x = ((ULONG)(UWORD)f[ARGHEAD+2] << BITSINWORD) + (UWORD)f[ARGHEAD+1];
+		N = (f[ARGHEAD+5] < 0) ? -(LONG)x : (LONG)x;
+		f += *f;
+	}
+	if ( N <= 0 ) return(0);
+
+	/* u: canonical FORM integer argument (-SNUMBER or long integer n/1). */
+	if ( f >= fstop ) return(0);
+	if ( *f == -SNUMBER ) {
+		f += 2;
+	}
+	else {
+		if ( *f <= 0 || f + *f > fstop ) return(0);
+		size = f[*f-1];
+		if ( size == 0 ) return(0);
+		nnum = (WORD)((ABS(size)-1)/2);
+		if ( nnum <= 0 ) return(0);
+		if ( ABS(size) != 2*nnum + 1 ) return(0);
+		if ( *f != ARGHEAD + 2*nnum + 2 ) return(0);
+		if ( f[ARGHEAD] != 2*nnum + 2 ) return(0);
+		/* Denominator must be exactly 1, padded with zeros to nnum limbs. */
+		if ( f[ARGHEAD+1+nnum] != 1 ) return(0);
+		for ( i = 1; i < nnum; i++ ) {
+			if ( f[ARGHEAD+1+nnum+i] != 0 ) return(0);
+		}
+		f += *f;
+	}
+	if ( f != fstop ) return(0);
+
+	return(1);
+}
+/*
+ 		#] TestPadic :
  		#[ UnpackPadic :
 
 		The internal `padic_` representation stores the FLINT triplet (u,v,N):
@@ -532,7 +535,7 @@ static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 }
 /*
  		#] PackPadic :
- 		#] Internal p-adic function format :
+  	#] Internal p-adic function format :
   	#[ Runtime lifecycle :
  		#[ PadicIsActive :
 */
@@ -633,43 +636,6 @@ void ClearPadicSystem(void)
  		#] ClearPadicSystem :
   	#] Runtime lifecycle :
   	#[ Validation and conversion :
- 		#[ TestPadic :
-
-	Checks whether `fun` has the shape of a well-formed internal padic_ record:
-	    padic_(v,N,u)
-	with v and N stored as signed LONG arguments and u as a canonical FORM
-	integer argument. This routine does not check that N matches the active
-	context; UnpackPadic() performs that check.
-*/
-int TestPadic(WORD *fun)
-{
-	WORD *f, *fstop;
-	WORD nargs;
-	LONG v, N;
-	mpz_t z;
-
-	f = fun + FUNHEAD;
-	fstop = fun + fun[1];
-	nargs = 0;
-	while ( f < fstop ) {
-		nargs++;
-		NEXTARG(f);
-	}
-	if ( nargs != 3 ) return(0);
-
-	f = fun + FUNHEAD;
-	f = ReadLongArg(f,&v);
-	if ( f == 0 ) return(0);
-	f = ReadLongArg(f,&N);
-	if ( f == 0 || N <= 0 ) return(0);
-	mpz_init(z);
-	f = ReadMpzArg(f,fstop,z);
-	mpz_clear(z);
-	if ( f == 0 || f != fstop ) return(0);
-	return(1);
-}
-/*
- 		#] TestPadic :
  		#[ RatToPadicFun :
 
 	Converts a FORM rational coefficient (formrat/nrat) to a `padic_` function
