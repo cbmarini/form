@@ -2170,6 +2170,19 @@ Print F;
 assert succeeded?
 assert result("F") =~ /padic_\(-?[0-9]+,6,/
 *--#] padic_mulrat_mulpadics :
+*--#[ padic_mul_overflow_zero :
+#-
+#StartPadic 5,N=6
+Format padicprecision off;
+Symbol x;
+Local F = x*padic_(5,6,1)*padic_(1,6,1);
+.sort
+Print F;
+.end
+#require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
+assert succeeded?
+assert result("F") =~ expr("0")
+*--#] padic_mul_overflow_zero :
 *--#[ padic_mulrat_zero :
 #-
 #StartPadic 5,N=6
@@ -2181,7 +2194,7 @@ Print F;
 .end
 #require (v=`#{FormTest.cfg.form_cmd} -vv`; v.include?("+padic"))
 assert succeeded?
-assert result("F") =~ /padic_\(0,6,0\)/
+assert result("F") =~ expr("0")
 *--#] padic_mulrat_zero :
 *--#[ padic_division :
 #-

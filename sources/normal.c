@@ -2450,10 +2450,14 @@ redoshort:
 				else {
 					if ( TestPadic(t) == 0 ) goto defaultcase;
 					if ( withpadic == 1 ) {
-						if ( MulPadics(BHEAD padicaccum,firstpadic,t) ) goto FromNorm;
+						k = MulPadics(BHEAD padicaccum,firstpadic,t);
+						if ( k < 0 ) goto FromNorm;
+						if ( k > 0 ) goto NormZero;
 					}
 					else {
-						if ( MulPadics(BHEAD padicaccum,padicaccum,t) ) goto FromNorm;
+						k = MulPadics(BHEAD padicaccum,padicaccum,t);
+						if ( k < 0 ) goto FromNorm;
+						if ( k > 0 ) goto NormZero;
 					}
 					withpadic++;
 				}
@@ -4192,7 +4196,9 @@ NoRep:
 		}
 		else {
 			WORD *source = (withpadic == 1) ? firstpadic : padicaccum;
-			if ( MulRatToPadic(BHEAD m,source,(UWORD *)n_coef,ncoef) ) goto FromNorm;
+			k = MulRatToPadic(BHEAD m,source,(UWORD *)n_coef,ncoef);
+			if ( k < 0 ) goto FromNorm;
+			if ( k > 0 ) goto NormZero;
 			AT.PadicPos = m-termout;
 			m += m[1];
 			padicsign = 3;
