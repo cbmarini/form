@@ -659,6 +659,11 @@ int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 	Multiplies an existing `padic_` coefficient by a FORM rational coefficient.
 	This is used by Normalize() when a term contains both a numeric coefficient
 	and a `padic_` function.
+
+	Return value:
+	- 0  on success, with a non-zero product packed into outfun,
+	- 1  if the product is p-adic zero (caller should drop the term),
+	- -1 on runtime/validation failure.
 */
 int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 {
@@ -670,6 +675,7 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 	FormRatToMpq(aux->q1,formrat,nrat);
 	padic_set_mpq(aux->p2,aux->q1,ActivePadicContext);
 	padic_mul(aux->p3,aux->p1,aux->p2,ActivePadicContext);
+	if ( padic_is_zero(aux->p3) ) return(1);
 	PackPadic(aux,outfun,aux->p3);
 	return(0);
 }
@@ -679,6 +685,11 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 
 	Multiplies two internal `padic_` function records and stores the product
 	as a new `padic_` record in fun3.
+
+	Return value:
+	- 0  on success, with a non-zero product packed into fun3,
+	- 1  if the product is p-adic zero (caller should drop the term),
+	- -1 on runtime/validation failure.
 */
 int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
@@ -689,6 +700,7 @@ int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 	if ( UnpackPadic(aux,aux->p1,fun1) ) return(-1);
 	if ( UnpackPadic(aux,aux->p2,fun2) ) return(-1);
 	padic_mul(aux->p3,aux->p1,aux->p2,ActivePadicContext);
+	if ( padic_is_zero(aux->p3) ) return(1);
 	PackPadic(aux,fun3,aux->p3);
 	return(0);
 }
