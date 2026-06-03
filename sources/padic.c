@@ -59,14 +59,14 @@
 	The context is configured by #StartPadic / #EndPadic.
 
 	Note: the internal `padic_` coefficient carrier does not store p itself.
-	The active `PadicPrime`/`ActivePadicContext` is assumed when unpacking and
+	The active `PadicPrime`/`PadicContext` is assumed when unpacking and
 	operating on p-adic coefficients.
 */
-#define PadicRuntimeActive     AM.PadicRuntimeActive
-#define PadicContextInitialized AM.PadicContextInitialized
-#define PadicPrime             AM.PadicPrime
-#define PadicPrecision         AM.PadicPrecision
-#define ActivePadicContext     ((padic_ctx_struct *)(AM.PadicContext))
+#define PadicActive            AC.activePadic
+#define PadicPrime             AC.activePadicPrime
+#define PadicPrecision         AC.activePadicPrecision
+#define ActivePadicContext     AC.activePadicContext
+#define PadicContext           ((padic_ctx_struct *)(ActivePadicContext))
 
 /*
 	Thread-local aux storage. The pointer is stored in AT.padic_aux_.
@@ -90,21 +90,14 @@ typedef struct PADIC_AUX_ {
 } PADIC_AUX;
 
 /*
-  	#] Includes : 
-  	#[ Helpers :
- 		#[ GetPadicAux :
+	AT.padic_aux_ is allocated by StartPadicSystem() for all threads.
+	When p-adics are not active this pointer is 0.
 */
-static PADIC_AUX *GetPadicAux(void)
-{
-	GETIDENTITY
-	/*
-		AT.padic_aux_ is allocated by StartPadicSystem() for all threads.
-		When p-adics are not active this pointer is 0.
-	*/
-	return (PADIC_AUX *)(AT.padic_aux_);
-}
+#define GetPadicAux ((PADIC_AUX *)(AT.padic_aux_))
+
 /*
- 		#] GetPadicAux :
+ 	#] Includes : 
+  	#[ Helpers :
  		#[ InitPadicAux :
 */
 static void InitPadicAux(PADIC_AUX *aux, LONG prec)
@@ -119,9 +112,9 @@ static void InitPadicAux(PADIC_AUX *aux, LONG prec)
 }
 /*
  		#] InitPadicAux :
- 		#[ ClearPadicAux :
+ 		#[ ClearSinglePadicAux :
 */
-static void ClearPadicAux(PADIC_AUX *aux)
+static void ClearSinglePadicAux(PADIC_AUX *aux)
 {
 	padic_clear(aux->p1);
 	padic_clear(aux->p2);
@@ -132,18 +125,13 @@ static void ClearPadicAux(PADIC_AUX *aux)
 	mpz_clear(aux->z2);
 }
 /*
- 		#] ClearPadicAux :
- 		#[ AllocatePadicAuxForAllThreads :
+ 		#] ClearSinglePadicAux :
+ 		#[ AllocatePadicAux :
 */
-static int AllocatePadicAuxForAllThreads(void)
+static void AllocatePadicAux(void)
 {
 #ifdef WITHPTHREADS
 	int id, totnum;
-
-	/*
-		Allocate for all regular threads; when sortbots are enabled they may
-		also call into p-adic code paths, so allocate for them as well.
-	*/
 	totnum = AM.totalnumberofthreads;
 #ifdef WITHSORTBOTS
 	totnum = MaX(2 * AM.totalnumberofthreads - 3, AM.totalnumberofthreads);
@@ -151,12 +139,11 @@ static int AllocatePadicAuxForAllThreads(void)
 	for ( id = 0; id < totnum; id++ ) {
 		PADIC_AUX *aux;
 		if ( AB[id]->T.padic_aux_ ) {
-			ClearPadicAux((PADIC_AUX *)(AB[id]->T.padic_aux_));
+			ClearSinglePadicAux((PADIC_AUX *)(AB[id]->T.padic_aux_));
 			M_free(AB[id]->T.padic_aux_,"AB[id]->T.padic_aux_");
 			AB[id]->T.padic_aux_ = 0;
 		}
-		aux = (PADIC_AUX *)Malloc1(sizeof(PADIC_AUX),"AB[id]->T.padic_aux_");
-		if ( aux == 0 ) return(-1);
+		aux = Malloc1(sizeof(PADIC_AUX),"AB[id]->T.padic_aux_");
 		InitPadicAux(aux,PadicPrecision);
 		AB[id]->T.padic_aux_ = (void *)aux;
 	}
@@ -166,98 +153,115 @@ static int AllocatePadicAuxForAllThreads(void)
 		Single-thread build: AT.padic_aux_ is the only instance.
 	*/
 	if ( AT.padic_aux_ ) {
-		ClearPadicAux((PADIC_AUX *)(AT.padic_aux_));
+		ClearSinglePadicAux((PADIC_AUX *)(AT.padic_aux_));
 		M_free(AT.padic_aux_,"AT.padic_aux_");
 		AT.padic_aux_ = 0;
 	}
-	aux = (PADIC_AUX *)Malloc1(sizeof(PADIC_AUX),"AT.padic_aux_");
-	if ( aux == 0 ) return(-1);
+	aux = Malloc1(sizeof(PADIC_AUX),"AT.padic_aux_");
 	InitPadicAux(aux,PadicPrecision);
 	AT.padic_aux_ = (void *)aux;
 #endif
-	return(0);
 }
 /*
- 		#] AllocatePadicAuxForAllThreads :
- 		#[ ClearPadicAuxForAllThreads :
+ 		#] AllocatePadicAux :
+ 		#[ ClearPadicAux :
 */
-static void ClearPadicAuxForAllThreads(void)
+static void ClearPadicAux(void)
 {
 #ifdef WITHPTHREADS
 	int id, totnum;
-	/*
-		Mirror the allocation logic in AllocatePadicAuxForAllThreads().
-	*/
 	totnum = AM.totalnumberofthreads;
 #ifdef WITHSORTBOTS
 	totnum = MaX(2 * AM.totalnumberofthreads - 3, AM.totalnumberofthreads);
 #endif
 	for ( id = 0; id < totnum; id++ ) {
 		if ( AB[id]->T.padic_aux_ ) {
-			ClearPadicAux((PADIC_AUX *)(AB[id]->T.padic_aux_));
+			ClearSinglePadicAux((PADIC_AUX *)(AB[id]->T.padic_aux_));
 			M_free(AB[id]->T.padic_aux_,"AB[id]->T.padic_aux_");
 			AB[id]->T.padic_aux_ = 0;
 		}
 	}
 #else
 	if ( AT.padic_aux_ ) {
-		ClearPadicAux((PADIC_AUX *)(AT.padic_aux_));
+		ClearSinglePadicAux((PADIC_AUX *)(AT.padic_aux_));
 		M_free(AT.padic_aux_,"AT.padic_aux_");
 		AT.padic_aux_ = 0;
 	}
 #endif
 }
 /*
- 		#] ClearPadicAuxForAllThreads :
- 		#[ FormRatToMpq :
-
-	Converts the internal FORM rational coefficient encoding (formrat/ratsize)
-	to a GMP rational.
-
-	The coefficient format is:
-	- ratsize is a signed length code of the form +/- (2*n+1)
-	- formrat[0..n-1] holds |numerator| as base-2^BITSINWORD limbs
-	- formrat[n..2*n-1] holds denominator limbs (padded)
-	- the sign of the rational is carried in the sign of ratsize
-	- the final slot formrat[2*n] stores ABS(ratsize)
+ 		#] ClearPadicAux :
+ 		#[ PadicIsPrime :
 */
-static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
+int PadicIsPrime(LONG p)
 {
-	WORD nnum, nden;
-	UWORD *num, *den;
-	int sign = 1;
-	mpz_t znum, zden;
-
-	mpz_init(znum);
-	mpz_init(zden);
-
-	if ( ratsize < 0 ) {
-		ratsize = -ratsize;
-		sign = -1;
-	}
-	nnum = nden = (ratsize-1)/2;
-	num = formrat;
-	den = formrat + nnum;
-	/* Trim leading zero limbs (FORM coefficients are padded). */
-	while ( nnum > 0 && num[nnum-1] == 0 ) nnum--;
-	while ( nden > 0 && den[nden-1] == 0 ) nden--;
-
-	if ( nnum > 0 ) mpz_import(znum,(size_t)nnum,-1,sizeof(UWORD),0,0,num);
-	else            mpz_set_ui(znum,0UL);
-	if ( nden > 0 ) mpz_import(zden,(size_t)nden,-1,sizeof(UWORD),0,0,den);
-	else            mpz_set_ui(zden,1UL);
-
-	if ( sign < 0 ) mpz_neg(znum,znum);
-
-	mpq_set_num(result,znum);
-	mpq_set_den(result,zden);
-	mpq_canonicalize(result);
-
-	mpz_clear(zden);
-	mpz_clear(znum);
+	int prime;
+	fmpz_t z;
+	if ( p <= 1 ) return(0);
+	fmpz_init_set_si(z,(slong)p);
+	prime = fmpz_is_prime(z);
+	fmpz_clear(z);
+	return(prime == 1);
 }
 /*
- 		#] FormRatToMpq :
+ 		#] PadicIsPrime :
+ 		#[ StartPadicSystem :
+
+	Initializes (or reinitializes) the single global p-adic context.
+	Called by #StartPadic from the preprocessor.
+
+	This function:
+	- clears the previous context if active,
+	- initializes FLINT's padic_ctx_struct for (p,N),
+	- allocates per-thread scratch objects (AT.padic_aux_ / AB[id]->T.padic_aux_).
+*/
+int StartPadicSystem(LONG p, LONG N)
+{
+	fmpz_t prime;
+	if ( p <= 1 || N <= 0 ) return(1);
+	if ( PadicActive ) { // Clear the previous padic system
+		ClearPadicSystem();
+	}
+	PadicPrime = p;
+	PadicPrecision = N;
+	ActivePadicContext = Malloc1(sizeof(padic_ctx_struct),"PadicContext");
+	fmpz_init_set_si(prime,(slong)p);
+	padic_ctx_init(PadicContext,prime,0,(slong)N,PADIC_SERIES);
+	fmpz_clear(prime);
+	AllocatePadicAux();
+	PadicActive = 1;
+	return(0);
+}
+/*
+ 		#] StartPadicSystem :
+ 		#[ ClearPadicSystem :
+
+	Releases all runtime state associated with p-adic arithmetic, including:
+	- per-thread aux buffers,
+	- the FLINT context,
+	- cached print buffer AO.padicspace.
+*/
+void ClearPadicSystem(void)
+{
+	ClearPadicAux();
+	if ( PadicActive ) {
+		padic_ctx_clear(PadicContext);
+	}
+	if ( ActivePadicContext ) {
+		M_free(ActivePadicContext,"PadicContext");
+		ActivePadicContext = 0;
+	}
+	PadicActive = 0;
+	PadicPrime = 0;
+	PadicPrecision = 0;
+	if ( AO.padicspace ) {
+		M_free(AO.padicspace,"padicspace");
+		AO.padicspace = 0;
+		AO.padicsize = 0;
+	}
+}
+/*
+ 		#] ClearPadicSystem :
   	#] Helpers :
   	#[ Internal p-adic function format :
  		#[ TestPadic :
@@ -356,7 +360,7 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 	LONG v, N;
 	ULONG x;
 
-	if ( !PadicRuntimeActive || !PadicContextInitialized ) {
+	if ( !PadicActive ) {
 		MLOCK(ErrorMessageLock);
 		MesPrint("Illegal attempt at using a padic_ function without proper startup.");
 		MesPrint("Please use %#StartPadic <p>,N=<N> first.");
@@ -412,7 +416,7 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 	fmpz_set_mpz(padic_unit(out),aux->z1);
 	padic_val(out) = (slong)v;
 	padic_prec(out) = (slong)N;
-	padic_reduce(out,ActivePadicContext);
+	padic_reduce(out,PadicContext);
 	return(0);
 }
 /*
@@ -437,8 +441,8 @@ static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 	/*
 		Normalize first so the serialized (v,N,u) triplet is canonical.
 	*/
-	padic_set(aux->p4,in,ActivePadicContext);
-	padic_reduce(aux->p4,ActivePadicContext);
+	padic_set(aux->p4,in,PadicContext);
+	padic_reduce(aux->p4,PadicContext);
 	v = (LONG)padic_val(aux->p4);
 	N = (LONG)padic_prec(aux->p4);
 	/*
@@ -536,106 +540,56 @@ static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 /*
  		#] PackPadic :
   	#] Internal p-adic function format :
-  	#[ Runtime lifecycle :
- 		#[ PadicIsActive :
-*/
-int PadicIsActive(void)
-{
-	return(PadicRuntimeActive);
-}
-/*
- 		#] PadicIsActive :
- 		#[ PadicIsPrime :
-*/
-int PadicIsPrime(LONG p)
-{
-	int prime;
-	fmpz_t z;
-	if ( p <= 1 ) return(0);
-	fmpz_init(z);
-	fmpz_set_si(z,(slong)p);
-	prime = fmpz_is_prime(z);
-	fmpz_clear(z);
-	return(prime == 1);
-}
-/*
- 		#] PadicIsPrime :
- 		#[ StartPadicSystem :
-
-	Initializes (or reinitializes) the single global p-adic context for this run.
-	Called by %#StartPadic from the preprocessor.
-
-	This function:
-	- clears the previous context if active,
-	- initializes FLINT's padic_ctx_struct for (p,N),
-	- allocates per-thread scratch objects (AT.padic_aux_ / AB[id]->T.padic_aux_).
-*/
-int StartPadicSystem(LONG p, LONG N)
-{
-	fmpz_t prime;
-	if ( p <= 1 || N <= 0 ) return(1);
-	if ( PadicRuntimeActive ) {
-		ClearPadicSystem();
-	}
-	if ( AM.PadicContext == 0 ) {
-		AM.PadicContext = Malloc1(sizeof(padic_ctx_struct),"PadicContext");
-		if ( AM.PadicContext == 0 ) return(1);
-	}
-	if ( PadicContextInitialized ) {
-		padic_ctx_clear(ActivePadicContext);
-		PadicContextInitialized = 0;
-	}
-	PadicPrime = p;
-	PadicPrecision = N;
-	fmpz_init(prime);
-	fmpz_set_si(prime,(slong)p);
-	padic_ctx_init(ActivePadicContext,prime,0,(slong)N,PADIC_SERIES);
-	fmpz_clear(prime);
-	PadicContextInitialized = 1;
-	PadicRuntimeActive = 1;
-
-	if ( AllocatePadicAuxForAllThreads() ) {
-		MLOCK(ErrorMessageLock);
-		MesPrint("Failed to initialize p-adic thread-local buffers.");
-		MUNLOCK(ErrorMessageLock);
-		ClearPadicSystem();
-		return(1);
-	}
-	return(0);
-}
-/*
- 		#] StartPadicSystem :
- 		#[ ClearPadicSystem :
-
-	Releases all runtime state associated with p-adic arithmetic, including:
-	- per-thread aux buffers,
-	- the FLINT context,
-	- cached print buffer AO.padicspace.
-*/
-void ClearPadicSystem(void)
-{
-	ClearPadicAuxForAllThreads();
-	if ( PadicContextInitialized ) {
-		padic_ctx_clear(ActivePadicContext);
-		PadicContextInitialized = 0;
-	}
-	if ( AM.PadicContext ) {
-		M_free(AM.PadicContext,"PadicContext");
-		AM.PadicContext = 0;
-	}
-	PadicRuntimeActive = 0;
-	PadicPrime = 0;
-	PadicPrecision = 0;
-	if ( AO.padicspace ) {
-		M_free(AO.padicspace,"padicspace");
-		AO.padicspace = 0;
-		AO.padicsize = 0;
-	}
-}
-/*
- 		#] ClearPadicSystem :
-  	#] Runtime lifecycle :
   	#[ Validation and conversion :
+ 		#[ FormRatToMpq :
+
+	Converts the internal FORM rational coefficient encoding (formrat/ratsize)
+	to a GMP rational.
+
+	The coefficient format is:
+	- ratsize is a signed length code of the form +/- (2*n+1)
+	- formrat[0..n-1] holds |numerator| as base-2^BITSINWORD limbs
+	- formrat[n..2*n-1] holds denominator limbs (padded)
+	- the sign of the rational is carried in the sign of ratsize
+	- the final slot formrat[2*n] stores ABS(ratsize)
+*/
+static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
+{
+	WORD nnum, nden;
+	UWORD *num, *den;
+	int sign = 1;
+	mpz_t znum, zden;
+
+	mpz_init(znum);
+	mpz_init(zden);
+
+	if ( ratsize < 0 ) {
+		ratsize = -ratsize;
+		sign = -1;
+	}
+	nnum = nden = (ratsize-1)/2;
+	num = formrat;
+	den = formrat + nnum;
+	/* Trim leading zero limbs (FORM coefficients are padded). */
+	while ( nnum > 0 && num[nnum-1] == 0 ) nnum--;
+	while ( nden > 0 && den[nden-1] == 0 ) nden--;
+
+	if ( nnum > 0 ) mpz_import(znum,(size_t)nnum,-1,sizeof(UWORD),0,0,num);
+	else            mpz_set_ui(znum,0UL);
+	if ( nden > 0 ) mpz_import(zden,(size_t)nden,-1,sizeof(UWORD),0,0,den);
+	else            mpz_set_ui(zden,1UL);
+
+	if ( sign < 0 ) mpz_neg(znum,znum);
+
+	mpq_set_num(result,znum);
+	mpq_set_den(result,zden);
+	mpq_canonicalize(result);
+
+	mpz_clear(zden);
+	mpz_clear(znum);
+}
+/*
+ 		#] FormRatToMpq :
  		#[ RatToPadicFun :
 
 	Converts a FORM rational coefficient (formrat/nrat) to a `padic_` function
@@ -644,11 +598,11 @@ void ClearPadicSystem(void)
 int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 {
 	PADIC_AUX *aux;
-	if ( !PadicRuntimeActive ) return(-1);
+	if ( !PadicActive ) return(-1);
 	aux = (PADIC_AUX *)(AT.padic_aux_);
 	if ( aux == 0 ) return(-1);
 	FormRatToMpq(aux->q1,formrat,nrat);
-	padic_set_mpq(aux->p1,aux->q1,ActivePadicContext);
+	padic_set_mpq(aux->p1,aux->q1,PadicContext);
 	PackPadic(aux,outfun,aux->p1);
 	return(0);
 }
@@ -668,13 +622,13 @@ int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 {
 	PADIC_AUX *aux;
-	if ( !PadicRuntimeActive ) return(-1);
+	if ( !PadicActive ) return(-1);
 	aux = (PADIC_AUX *)(AT.padic_aux_);
 	if ( aux == 0 ) return(-1);
 	if ( UnpackPadic(aux,aux->p1,infun) ) return(-1);
 	FormRatToMpq(aux->q1,formrat,nrat);
-	padic_set_mpq(aux->p2,aux->q1,ActivePadicContext);
-	padic_mul(aux->p3,aux->p1,aux->p2,ActivePadicContext);
+	padic_set_mpq(aux->p2,aux->q1,PadicContext);
+	padic_mul(aux->p3,aux->p1,aux->p2,PadicContext);
 	if ( padic_is_zero(aux->p3) ) return(1);
 	PackPadic(aux,outfun,aux->p3);
 	return(0);
@@ -694,12 +648,12 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
 	PADIC_AUX *aux;
-	if ( !PadicRuntimeActive ) return(-1);
+	if ( !PadicActive ) return(-1);
 	aux = (PADIC_AUX *)(AT.padic_aux_);
 	if ( aux == 0 ) return(-1);
 	if ( UnpackPadic(aux,aux->p1,fun1) ) return(-1);
 	if ( UnpackPadic(aux,aux->p2,fun2) ) return(-1);
-	padic_mul(aux->p3,aux->p1,aux->p2,ActivePadicContext);
+	padic_mul(aux->p3,aux->p1,aux->p2,PadicContext);
 	if ( padic_is_zero(aux->p3) ) return(1);
 	PackPadic(aux,fun3,aux->p3);
 	return(0);
@@ -714,7 +668,7 @@ int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
 	PADIC_AUX *aux;
-	if ( !PadicRuntimeActive ) return(-1);
+	if ( !PadicActive ) return(-1);
 	aux = (PADIC_AUX *)(AT.padic_aux_);
 	if ( aux == 0 ) return(-1);
 	if ( UnpackPadic(aux,aux->p1,fun1) ) return(-1);
@@ -726,7 +680,7 @@ int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 		Terminate(-1);
 		return(-1);
 	}
-	padic_div(aux->p3,aux->p1,aux->p2,ActivePadicContext);
+	padic_div(aux->p3,aux->p1,aux->p2,PadicContext);
 	PackPadic(aux,fun3,aux->p3);
 	return(0);
 }
@@ -813,17 +767,17 @@ static int PadicReconstructToMpq(mpq_t out, padic_t in)
 	modexp = N - v;
 	if ( modexp <= 0 ) goto ClearAndReturn;
 
-	fmpz_pow_ui(modulus,ActivePadicContext->p,(ulong)modexp);
+	fmpz_pow_ui(modulus,PadicContext->p,(ulong)modexp);
 	fmpz_mod(residue,padic_unit(in),modulus);
 	ok = fmpq_reconstruct_fmpz(recon,residue,modulus);
 	if ( !ok ) goto ClearAndReturn;
 
 	if ( v > 0 ) {
-		fmpz_pow_ui(ppower,ActivePadicContext->p,(ulong)v);
+		fmpz_pow_ui(ppower,PadicContext->p,(ulong)v);
 		fmpq_mul_fmpz(recon,recon,ppower);
 	}
 	else if ( v < 0 ) {
-		fmpz_pow_ui(ppower,ActivePadicContext->p,(ulong)(-v));
+		fmpz_pow_ui(ppower,PadicContext->p,(ulong)(-v));
 		fmpq_div_fmpz(recon,recon,ppower);
 	}
 
@@ -966,14 +920,15 @@ static int PrintPadicList(PADIC_AUX *aux, padic_t in)
 */
 int PrintPadic(WORD *fun,int numdigits)
 {
+	GETIDENTITY
 	PADIC_AUX *aux;
 	char *flint_string;
 	size_t n;
 	int digits = (int)PadicPrecision;
 	int mode = AO.PadicFormat;
 
-	if ( !PadicRuntimeActive || !PadicContextInitialized ) return(0);
-	aux = GetPadicAux();
+	if ( !PadicActive ) return(0);
+	aux = GetPadicAux;
 	if ( aux == 0 ) return(0);
 	if ( UnpackPadic(aux,aux->p1,fun) ) return(0);
 
@@ -981,14 +936,14 @@ int PrintPadic(WORD *fun,int numdigits)
 
 	if ( digits == (int)PadicPrecision ) {
 		if ( mode == PADICPRINTLIST ) return(PrintPadicList(aux,aux->p1));
-		flint_string = padic_get_str(0,aux->p1,ActivePadicContext);
+		flint_string = padic_get_str(0,aux->p1,PadicContext);
 	}
 	else {
 		padic_ctx_t short_ctx;
 		padic_t short_x;
-		padic_ctx_init(short_ctx,ActivePadicContext->p,0,(slong)digits,PADIC_SERIES);
+		padic_ctx_init(short_ctx,PadicContext->p,0,(slong)digits,PADIC_SERIES);
 		padic_init2(short_x,digits);
-		padic_get_mpq(aux->q1,aux->p1,ActivePadicContext);
+		padic_get_mpq(aux->q1,aux->p1,PadicContext);
 		padic_set_mpq(short_x,aux->q1,short_ctx);
 		if ( mode == PADICPRINTLIST ) {
 			int outlen = PrintPadicList(aux,short_x);
@@ -1042,7 +997,7 @@ int PrintPadic(WORD *fun,int numdigits)
 */
 int CoToPadic(UBYTE *s)
 {
-	if ( !PadicRuntimeActive ) {
+	if ( !PadicActive ) {
 		MesPrint("&Illegal attempt to convert to padic_ without activating p-adic numbers.");
 		MesPrint("&Forgotten %#startpadic instruction?");
 		return(1);
@@ -1064,7 +1019,7 @@ int CoToPadic(UBYTE *s)
 */
 int CoPadicToRat(UBYTE *s)
 {
-	if ( !PadicRuntimeActive ) {
+	if ( !PadicActive ) {
 		MesPrint("&Illegal attempt to convert from padic_ without activating p-adic numbers.");
 		MesPrint("&Forgotten %#startpadic instruction?");
 		return(1);
@@ -1094,8 +1049,8 @@ int ToPadic(PHEAD WORD *term, WORD level)
 	PADIC_AUX *aux;
 	WORD *t, *scan, *tstop, nsize, ncoef;
 
-	if ( !PadicRuntimeActive ) return(1);
-	aux = GetPadicAux();
+	if ( !PadicActive ) return(1);
+	aux = GetPadicAux;
 	if ( aux == 0 ) return(1);
 
 	t = term + *term;
@@ -1118,7 +1073,7 @@ int ToPadic(PHEAD WORD *term, WORD level)
 	}
 
 	FormRatToMpq(aux->q1,(UWORD *)tstop,ncoef);
-	padic_set_mpq(aux->p1,aux->q1,ActivePadicContext);
+	padic_set_mpq(aux->p1,aux->q1,PadicContext);
 	/* Overwrite the coefficient slot with padic_(v,N,u) and append 1/1. */
 	PackPadic(aux,tstop,aux->p1);
 	tstop += tstop[1]; /* advance past the newly written padic_ record */
@@ -1145,8 +1100,8 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 	PADIC_AUX *aux;
 	WORD *tstop, *t, *stop, nsize, nsign, ncoef;
 
-	if ( !PadicRuntimeActive ) return(1);
-	aux = GetPadicAux();
+	if ( !PadicActive ) return(1);
+	aux = GetPadicAux;
 	if ( aux == 0 ) return(1);
 
 	tstop = term + *term;
@@ -1171,7 +1126,7 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 				No unique small reconstruction exists for the current precision.
 				Fall back to FLINT's canonical lift.
 			*/
-			padic_get_mpq(aux->q1,aux->p1,ActivePadicContext);
+			padic_get_mpq(aux->q1,aux->p1,PadicContext);
 		}
 		if ( MpqToFormRat(0,&ncoef,aux->q1) ) goto RatFailure;
 		stop = (WORD *)(((UBYTE *)term) + AM.MaxTer);
@@ -1225,7 +1180,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 	WORD *coef1, *coef2, size1, size2, *fun1, *fun2, *fun3;
 	WORD *s1, *s2, *t1, *t2, i, j, jj;
 
-	aux = GetPadicAux();
+	aux = GetPadicAux;
 	if ( aux == 0 ) return(0);
 
 	s1 = *ps1;
@@ -1238,25 +1193,25 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		UnpackPadic(aux,aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,ActivePadicContext);
+		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
 		UnpackPadic(aux,aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,ActivePadicContext);
+		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 1 ) {
 		/* First coefficient is padic_, second is rational. */
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		UnpackPadic(aux,aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,ActivePadicContext);
+		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
 		FormRatToMpq(aux->q1,(UWORD *)coef2,size2);
-		padic_set_mpq(aux->p2,aux->q1,ActivePadicContext);
+		padic_set_mpq(aux->p2,aux->q1,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
 		/* Second coefficient is padic_, first is rational. */
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		UnpackPadic(aux,aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,ActivePadicContext);
+		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
 		FormRatToMpq(aux->q1,(UWORD *)coef1,size1);
-		padic_set_mpq(aux->p1,aux->q1,ActivePadicContext);
+		padic_set_mpq(aux->p1,aux->q1,PadicContext);
 	}
 	else {
 		MLOCK(ErrorMessageLock);
@@ -1266,7 +1221,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		return(0);
 	}
 
-	padic_add(aux->p3,aux->p1,aux->p2,ActivePadicContext);
+	padic_add(aux->p3,aux->p1,aux->p2,PadicContext);
 	if ( padic_is_zero(aux->p3) ) {
 		/* Terms cancel. */
 		*ps1 = *ps2 = 0;
@@ -1349,7 +1304,7 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 	WORD jj, *t1, *t2, i, *term1 = *interm1, *term2 = *interm2;
 	int retval = 0;
 
-	aux = GetPadicAux();
+	aux = GetPadicAux;
 	if ( aux == 0 ) return(0);
 
 	coef1 = term1+*term1; size1 = coef1[-1]; coef1 -= ABS(size1);
@@ -1358,23 +1313,23 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 		fun1 = term1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		fun2 = term2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		UnpackPadic(aux,aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,ActivePadicContext);
+		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
 		UnpackPadic(aux,aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,ActivePadicContext);
+		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 1 ) {
 		fun1 = term1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		UnpackPadic(aux,aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,ActivePadicContext);
+		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
 		FormRatToMpq(aux->q1,(UWORD *)coef2,size2);
-		padic_set_mpq(aux->p2,aux->q1,ActivePadicContext);
+		padic_set_mpq(aux->p2,aux->q1,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
 		fun2 = term2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		FormRatToMpq(aux->q1,(UWORD *)coef1,size1);
-		padic_set_mpq(aux->p1,aux->q1,ActivePadicContext);
+		padic_set_mpq(aux->p1,aux->q1,PadicContext);
 		UnpackPadic(aux,aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,ActivePadicContext);
+		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
 	}
 	else {
 		MLOCK(ErrorMessageLock);
@@ -1384,7 +1339,7 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 		return(0);
 	}
 
-	padic_add(aux->p3,aux->p1,aux->p2,ActivePadicContext);
+	padic_add(aux->p3,aux->p1,aux->p2,PadicContext);
 	if ( padic_is_zero(aux->p3) ) {
 		AT.SortPadicMode = 0;
 		return(0);
@@ -1449,8 +1404,5 @@ Over1:
 }
 /*
  		#] MergeWithPadic :
-*/
-
-/*
   	#] Sorting :
 */

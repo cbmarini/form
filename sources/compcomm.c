@@ -3697,7 +3697,7 @@ SwitchOff:
 	}
 #endif
 #ifdef WITHPADIC
-	if ( PadicIsActive() ) {
+	if ( AC.activePadic ) {
 		MesPrint("&Simultaneous use of p-adic and modulus arithmetic makes no sense.");
 		Retval = 1;
 	}
@@ -5492,7 +5492,7 @@ int CoPolyFun(UBYTE *s)
 	}
 #endif
 #ifdef WITHPADIC
-	if ( PadicIsActive() ) {
+	if ( AC.activePadic ) {
 		MesPrint("&Simultaneous use of PolyFun and padic_ is not allowed.");
 		error = 1;
 	}
@@ -5530,7 +5530,7 @@ int CoPolyRatFun(UBYTE *s)
 	}
 #endif
 #ifdef WITHPADIC
-	if ( PadicIsActive() ) {
+	if ( AC.activePadic ) {
 		MesPrint("&Simultaneous use of PolyFun and padic_ is not allowed.");
 		error = 1;
 	}

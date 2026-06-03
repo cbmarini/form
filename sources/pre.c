@@ -7776,7 +7776,7 @@ int DoStartFloat(UBYTE *s)
 		error = 1;
 	}
 #ifdef WITHPADIC
-	if ( PadicIsActive() ) {
+	if ( AC.activePadic ) {
 		MesPrint("@Simultaneous use of float_ and padic_ is not allowed.");
 		error = 1;
 	}
@@ -7891,7 +7891,7 @@ int DoStartPadic(UBYTE *s)
 {
 	GETIDENTITY
 	int error = 0;
-	LONG p = 0, N = 0;
+	LONG p, N;
 	UBYTE *ss;
 
 	if ( AP.PreSwitchModes[AP.PreSwitchLevel] != EXECUTINGPRESWITCH ) return(0);
@@ -7914,40 +7914,26 @@ int DoStartPadic(UBYTE *s)
 
 	while ( *s == ',' || *s == ' ' || *s == '\t' ) s++;
 	ss = s;
-	if ( *s < '0' || *s > '9' ) goto IllPar;
-	do {
-		p = 10 * p + (*s++ - '0');
-	} while ( *s >= '0' && *s <= '9' );
-	while ( *s == ' ' || *s == '\t' ) s++;
-	if ( *s != ',' ) goto IllPar;
-	s++;
-	while ( *s == ' ' || *s == '\t' ) s++;
-
-	if ( tolower(*s) == 'n' ) {
-		s++;
-		while ( *s == ' ' || *s == '\t' ) s++;
-		if ( *s != '=') goto IllPar;
-		s++;
-		while ( *s == ' ' || *s == '\t' ) s++;
-	}
-
-	if ( *s < '0' || *s > '9' ) goto IllPar;
-	do {
-		N = 10 * N + (*s++ - '0');
-	} while ( *s >= '0' && *s <= '9' );
+	// The first parameter is the prime number
+	if (FG.cTable[*s] == 1) ParseNumber(p,s)
+	else goto IllPar;
+	while ( *s == ',' || *s == ' ' || *s == '\t' ) s++;
+	// The second parameter is the p-adic precision
+	if (FG.cTable[*s] == 1) ParseNumber(N,s)
+	else goto IllPar;
 	while ( *s == ' ' || *s == '\t' ) s++;
 	if ( *s != 0 ) goto IllPar;
 
 	if ( p <= 1 ) {
-		MesPrint("@Illegal p parameter in %#StartPadic: %l",p);
+		MesPrint("@Illegal prime number in %#StartPadic: %l",p);
 		error = 1;
 	}
 	else if ( PadicIsPrime(p) == 0 ) {
-		MesPrint("@The p parameter in %#StartPadic should be prime: %l",p);
+		MesPrint("@The first parameter in %#StartPadic should be prime: %l",p);
 		error = 1;
 	}
 	if ( N <= 0 ) {
-		MesPrint("@Illegal N parameter in %#StartPadic: %l",N);
+		MesPrint("@The second parameter in %#StartPadic shoud be positive: %l",N);
 		error = 1;
 	}
 
