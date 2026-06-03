@@ -1350,11 +1350,10 @@ void StartVariables(void)
 	AC.DefaultPrecision = AM.gDefaultPrecision = AM.ggDefaultPrecision = DEFAULTPRECISION;
 #endif
 #ifdef WITHPADIC
-	AM.PadicPrime = 0;
-	AM.PadicPrecision = 0;
-	AM.PadicRuntimeActive = 0;
-	AM.PadicContextInitialized = 0;
-	AM.PadicContext = 0;
+	AC.activePadicPrime = 0;
+	AC.activePadicPrecision = 0;
+	AC.activePadic = 0;
+	AC.activePadicContext = 0;
 	AO.PadicFormat = PADICPRINTSERIES;
 #endif
 	AC.CommuteInSet = 0;
