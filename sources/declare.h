@@ -366,11 +366,6 @@ TP=T+1;while(TP<TT){if(*TP==AR.PolyFun){TP[2]|=(DIRTYFLAG|MUSTCLEANPRF);}TP+=TP[
 
 #endif
 
-#ifdef WITHPADIC
-#define padicaux_ ((WORD *)(AT.padic_aux_))
-#endif
-
-
 /*
 	MesPrint("P-level popped to %d with %d",AP.PreAssignLevel,(WORD)(AC.iPointer - AC.iBuffer));
 
