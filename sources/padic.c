@@ -93,7 +93,14 @@ typedef struct PADIC_AUX_ {
 	AT.padic_aux_ is allocated by StartPadicSystem() for all threads.
 	When p-adics are not active this pointer is 0.
 */
-#define GetPadicAux ((PADIC_AUX *)(AT.padic_aux_))
+#define PadicAux ((PADIC_AUX *)(AT.padic_aux_))
+#define paux1 (PadicAux->p1)
+#define paux2 (PadicAux->p2)
+#define paux3 (PadicAux->p3)
+#define paux4 (PadicAux->p4)
+#define pauxq1 (PadicAux->q1)
+#define pauxz1 (PadicAux->z1)
+#define pauxz2 (PadicAux->z2)
 
 /*
  	#] Includes : 
@@ -540,7 +547,7 @@ static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 /*
  		#] PackPadic :
   	#] Internal p-adic function format :
-  	#[ Validation and conversion :
+  	#[ Rekenen :
  		#[ FormRatToMpq :
 
 	Converts the internal FORM rational coefficient encoding (formrat/ratsize)
@@ -597,13 +604,10 @@ static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
 */
 int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 {
-	PADIC_AUX *aux;
 	if ( !PadicActive ) return(-1);
-	aux = (PADIC_AUX *)(AT.padic_aux_);
-	if ( aux == 0 ) return(-1);
-	FormRatToMpq(aux->q1,formrat,nrat);
-	padic_set_mpq(aux->p1,aux->q1,PadicContext);
-	PackPadic(aux,outfun,aux->p1);
+	FormRatToMpq(pauxq1,formrat,nrat);
+	padic_set_mpq(paux1,pauxq1,PadicContext);
+	PackPadic(PadicAux,outfun,paux1);
 	return(0);
 }
 /*
@@ -616,21 +620,18 @@ int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 
 	Return value:
 	- 0  on success, with a non-zero product packed into outfun,
-	- 1  if the product is p-adic zero (caller should drop the term),
+	- 1  if the product is p-adic zero,
 	- -1 on runtime/validation failure.
 */
 int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 {
-	PADIC_AUX *aux;
 	if ( !PadicActive ) return(-1);
-	aux = (PADIC_AUX *)(AT.padic_aux_);
-	if ( aux == 0 ) return(-1);
-	if ( UnpackPadic(aux,aux->p1,infun) ) return(-1);
-	FormRatToMpq(aux->q1,formrat,nrat);
-	padic_set_mpq(aux->p2,aux->q1,PadicContext);
-	padic_mul(aux->p3,aux->p1,aux->p2,PadicContext);
-	if ( padic_is_zero(aux->p3) ) return(1);
-	PackPadic(aux,outfun,aux->p3);
+	if ( UnpackPadic(PadicAux,paux1,infun) ) return(-1);
+	FormRatToMpq(pauxq1,formrat,nrat);
+	padic_set_mpq(paux2,pauxq1,PadicContext);
+	padic_mul(paux3,paux1,paux2,PadicContext);
+	if ( padic_is_zero(paux3) ) return(1);
+	PackPadic(PadicAux,outfun,paux3);
 	return(0);
 }
 /*
@@ -642,20 +643,17 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 
 	Return value:
 	- 0  on success, with a non-zero product packed into fun3,
-	- 1  if the product is p-adic zero (caller should drop the term),
+	- 1  if the product is p-adic zero,
 	- -1 on runtime/validation failure.
 */
 int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
-	PADIC_AUX *aux;
 	if ( !PadicActive ) return(-1);
-	aux = (PADIC_AUX *)(AT.padic_aux_);
-	if ( aux == 0 ) return(-1);
-	if ( UnpackPadic(aux,aux->p1,fun1) ) return(-1);
-	if ( UnpackPadic(aux,aux->p2,fun2) ) return(-1);
-	padic_mul(aux->p3,aux->p1,aux->p2,PadicContext);
-	if ( padic_is_zero(aux->p3) ) return(1);
-	PackPadic(aux,fun3,aux->p3);
+	if ( UnpackPadic(PadicAux,paux1,fun1) ) return(-1);
+	if ( UnpackPadic(PadicAux,paux2,fun2) ) return(-1);
+	padic_mul(paux3,paux1,paux2,PadicContext);
+	if ( padic_is_zero(paux3) ) return(1);
+	PackPadic(PadicAux,fun3,paux3);
 	return(0);
 }
 /*
@@ -667,21 +665,18 @@ int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 */
 int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
-	PADIC_AUX *aux;
 	if ( !PadicActive ) return(-1);
-	aux = (PADIC_AUX *)(AT.padic_aux_);
-	if ( aux == 0 ) return(-1);
-	if ( UnpackPadic(aux,aux->p1,fun1) ) return(-1);
-	if ( UnpackPadic(aux,aux->p2,fun2) ) return(-1);
-	if ( padic_is_zero(aux->p2) ) {
+	if ( UnpackPadic(PadicAux,paux1,fun1) ) return(-1);
+	if ( UnpackPadic(PadicAux,paux2,fun2) ) return(-1);
+	if ( padic_is_zero(paux2) ) {
 		MLOCK(ErrorMessageLock);
 		MesPrint("Division by zero in p-adic arithmetic.");
 		MUNLOCK(ErrorMessageLock);
 		Terminate(-1);
 		return(-1);
 	}
-	padic_div(aux->p3,aux->p1,aux->p2,PadicContext);
-	PackPadic(aux,fun3,aux->p3);
+	padic_div(paux3,paux1,paux2,PadicContext);
+	PackPadic(PadicAux,fun3,paux3);
 	return(0);
 }
 /*
@@ -792,7 +787,7 @@ ClearAndReturn:
 }
 /*
  		#] PadicReconstructToMpq :
-  	#] Validation and conversion :
+  	#] Rekenen :
   	#[ Printing :
  		#[ EnsurePadicPrintBuffer :
 */
@@ -928,8 +923,7 @@ int PrintPadic(WORD *fun,int numdigits)
 	int mode = AO.PadicFormat;
 
 	if ( !PadicActive ) return(0);
-	aux = GetPadicAux;
-	if ( aux == 0 ) return(0);
+	aux = PadicAux;
 	if ( UnpackPadic(aux,aux->p1,fun) ) return(0);
 
 	if ( numdigits > 0 && numdigits < digits ) digits = numdigits;
@@ -1050,8 +1044,7 @@ int ToPadic(PHEAD WORD *term, WORD level)
 	WORD *t, *scan, *tstop, nsize, ncoef;
 
 	if ( !PadicActive ) return(1);
-	aux = GetPadicAux;
-	if ( aux == 0 ) return(1);
+	aux = PadicAux;
 
 	t = term + *term;
 	ncoef = t[-1];          /* signed length code of the coefficient */
@@ -1101,8 +1094,7 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 	WORD *tstop, *t, *stop, nsize, nsign, ncoef;
 
 	if ( !PadicActive ) return(1);
-	aux = GetPadicAux;
-	if ( aux == 0 ) return(1);
+	aux = PadicAux;
 
 	tstop = term + *term;
 	nsize = ABS(tstop[-1]);
@@ -1180,8 +1172,8 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 	WORD *coef1, *coef2, size1, size2, *fun1, *fun2, *fun3;
 	WORD *s1, *s2, *t1, *t2, i, j, jj;
 
-	aux = GetPadicAux;
-	if ( aux == 0 ) return(0);
+	if ( !PadicActive ) return(0);
+	aux = PadicAux;
 
 	s1 = *ps1;
 	s2 = *ps2;
@@ -1304,8 +1296,8 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 	WORD jj, *t1, *t2, i, *term1 = *interm1, *term2 = *interm2;
 	int retval = 0;
 
-	aux = GetPadicAux;
-	if ( aux == 0 ) return(0);
+	if ( !PadicActive ) return(0);
+	aux = PadicAux;
 
 	coef1 = term1+*term1; size1 = coef1[-1]; coef1 -= ABS(size1);
 	coef2 = term2+*term2; size2 = coef2[-1]; coef2 -= ABS(size2);

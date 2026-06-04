@@ -74,11 +74,11 @@ static KEYWORD precommands[] = {
     ,{"endfloat"     , DoEndFloat     , 0, 0}
 #endif
 	,{"endif"        , DoEndif        , 0, 0}
+	,{"endinside"    , DoEndInside    , 0, 0}
+	,{"endnamespace" , DoEndNamespace , 0, 0}
 #ifdef WITHPADIC
     ,{"endpadic"     , DoEndPadic     , 0, 0}
 #endif
-	,{"endinside"    , DoEndInside    , 0, 0}
-	,{"endnamespace" , DoEndNamespace , 0, 0}
 	,{"endprocedure" , DoEndprocedure , 0, 0}
 	,{"endswitch"    , DoPreEndSwitch , 0, 0}
 	,{"exchange"     , DoPreExchange  , 0, 0}
