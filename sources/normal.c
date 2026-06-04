@@ -2442,14 +2442,14 @@ redoshort:
 				If it is a proper padic_ we give it special treatment.
 				If it is not proper, we treat it as a regular commuting function.
 */
-				if ( withpadic == 0 ) {
-					if ( TestPadic(t) == 0 ) goto defaultcase;
-					firstpadic = t;
-					withpadic = 1;
+				if ( TestPadic(t) == 0 || AC.activePadic == 0 ) {
+					goto defaultcase;
 				}
 				else {
-					if ( TestPadic(t) == 0 ) goto defaultcase;
-					if ( withpadic == 1 ) {
+					if ( withpadic == 0 ) {
+						firstpadic = t;
+					}
+					else if ( withpadic == 1 ) {
 						k = MulPadics(BHEAD padicaccum,firstpadic,t);
 						if ( k < 0 ) goto FromNorm;
 						if ( k > 0 ) goto NormZero;
