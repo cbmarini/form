@@ -271,17 +271,35 @@ void ClearPadicSystem(void)
  		#] ClearPadicSystem :
   	#] Helpers :
   	#[ Internal p-adic function format :
+ 		#[ Explanations :
+
+	p-adic coefficients are stored in a special function padic_ whose 
+	arguments contain the relevant p-adic information from the FLINT library:
+	    padic_(v, N, u)
+	where
+	- v is the p-adic valuation,
+	- N is the precision stored with this coefficient,
+	- u is the FLINT unit.
+
+	The prime p is not stored in the function. It is supplied by the active 
+	p-adic context configured through #StartPadic / #EndPadic. The unit
+	u is stored in the numerator of a normal FORM integer with denominator 1. 
+	Note: we could store p in the denominator as p cannot divide u.
+
+		#] Explanations :
  		#[ TestPadic :
 
-	Checks whether `fun` has the shape of a well-formed internal padic_ record:
+	Checks whether fun has the shape of a legal padic_ with its arguments:
 	    padic_(v,N,u)
-	with v and N stored as signed LONG arguments and u as a canonical FORM
-	integer argument.
+
+	Return value:
+	- 1 if fun is a syntactically valid padic_ function,
+	- 0 otherwise.
 */
 int TestPadic(WORD *fun)
 {
 	WORD *f, *fstop;
-	WORD nargs, size, nnum, i;
+	WORD nargs, nnum, i;
 	LONG N;
 	ULONG x;
 
@@ -292,10 +310,10 @@ int TestPadic(WORD *fun)
 		nargs++;
 		NEXTARG(f);
 	}
-	if ( nargs != 3 ) return(0);
+	if ( nargs != 3 || f != fstop ) return(0);
 
 	f = fun + FUNHEAD;
-	/* v: signed LONG argument (small or ARGHEAD+6 long form). */
+	/* v: signed LONG argument */
 	if ( *f == -SNUMBER ) {
 		f += 2;
 	}
@@ -306,7 +324,7 @@ int TestPadic(WORD *fun)
 		if ( f[ARGHEAD+4] != 0 ) return(0);
 		f += *f;
 	}
-	/* N: same encoding; additionally require positive precision. */
+	/* N: signed LONG argument; additionally require positive precision. */
 	if ( *f == -SNUMBER ) {
 		N = (LONG)f[1];
 		f += 2;
@@ -322,55 +340,44 @@ int TestPadic(WORD *fun)
 	}
 	if ( N <= 0 ) return(0);
 
-	/* u: canonical FORM integer argument (-SNUMBER or long integer n/1). */
-	if ( f >= fstop ) return(0);
+	/* u: FORM integer (-SNUMBER or long integer n/1). */
 	if ( *f == -SNUMBER ) {
 		f += 2;
 	}
 	else {
-		if ( *f <= 0 || f + *f > fstop ) return(0);
-		size = f[*f-1];
-		if ( size == 0 ) return(0);
-		nnum = (WORD)((ABS(size)-1)/2);
+		nnum = (WORD)((ABS(f[*f-1])-1)/2);
 		if ( nnum <= 0 ) return(0);
-		if ( ABS(size) != 2*nnum + 1 ) return(0);
 		if ( *f != ARGHEAD + 2*nnum + 2 ) return(0);
 		if ( f[ARGHEAD] != 2*nnum + 2 ) return(0);
-		/* Denominator must be exactly 1, padded with zeros to nnum limbs. */
-		if ( f[ARGHEAD+1+nnum] != 1 ) return(0);
+		/* Denominator must be exactly 1. */
+		f += ARGHEAD + nnum + 1;
+		if ( f[0] != 1 ) return(0);
 		for ( i = 1; i < nnum; i++ ) {
-			if ( f[ARGHEAD+1+nnum+i] != 0 ) return(0);
+			if ( f[i] != 0 ) return(0);
 		}
-		f += *f;
 	}
-	if ( f != fstop ) return(0);
-
 	return(1);
 }
 /*
  		#] TestPadic :
  		#[ UnpackPadic :
 
-		The internal `padic_` representation stores the FLINT triplet (u,v,N):
+	Converts the arguments of a padic_ function back into FLINT's padic_t.
+	We shouldn't come here if the p-adic system is turned off. 
 
-		  padic_(v, N, u)
-
-	where u is encoded as a normal Form integer argument (either -SNUMBER
-	or a long integer n/1 argument).
-
-	The prime p is not stored in the function: unpacking assumes the currently
-	active p-adic context configured by %#StartPadic.
+	Return value:
+	- 0  on success,
+	- -1 if fun is not a valid internal p-adic function.
 */
-static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
+static int UnpackPadic(padic_t out, WORD *fun)
 {
 	WORD *f;
-	LONG v, N;
 	ULONG x;
 
 	if ( !PadicActive ) {
 		MLOCK(ErrorMessageLock);
 		MesPrint("Illegal attempt at using a padic_ function without proper startup.");
-		MesPrint("Please use %#StartPadic <p>,N=<N> first.");
+		MesPrint("Please use %#StartPadic <p>,<N> first.");
 		MUNLOCK(ErrorMessageLock);
 		Terminate(-1);
 	}
@@ -387,22 +394,22 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 		so we can safely decode v, N and u here.
 	*/
 	if ( *f == -SNUMBER ) {
-		v = (LONG)f[1];
+		padic_val(out) = (slong)f[1];
 		f += 2;
 	}
 	else {
 		x = ((ULONG)(UWORD)f[ARGHEAD+2] << BITSINWORD) + (UWORD)f[ARGHEAD+1];
-		v = (f[ARGHEAD+5] < 0) ? -(LONG)x : (LONG)x;
+		padic_val(out) = (f[ARGHEAD+5] < 0) ? -(slong)x : (slong)x;
 		f += *f;
 	}
 
 	if ( *f == -SNUMBER ) {
-		N = (LONG)f[1];
+		padic_prec(out) = (slong)f[1];
 		f += 2;
 	}
 	else {
 		x = ((ULONG)(UWORD)f[ARGHEAD+2] << BITSINWORD) + (UWORD)f[ARGHEAD+1];
-		N = (f[ARGHEAD+5] < 0) ? -(LONG)x : (LONG)x;
+		padic_prec(out) = (f[ARGHEAD+5] < 0) ? -(slong)x : (slong)x;
 		f += *f;
 	}
 
@@ -410,19 +417,16 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
 		Decode the unit u.
 	*/
 	if ( *f == -SNUMBER ) {
-		mpz_set_si(aux->z1,(slong)(f[1]));
+		fmpz_set_si(padic_unit(out),(slong)(f[1]));
 	}
 	else {
 		WORD size, nnum;
 		size = f[*f-1];
 		nnum = (WORD)((ABS(size)-1)/2);
-		mpz_import(aux->z1,(size_t)nnum,-1,sizeof(UWORD),0,0,(UWORD *)(f+ARGHEAD+1));
-		if ( size < 0 ) mpz_neg(aux->z1,aux->z1);
+		flint_fmpz_set_form(padic_unit(out),(UWORD *)(f+ARGHEAD+1),
+			(size < 0) ? -nnum : nnum);
 	}
 
-	fmpz_set_mpz(padic_unit(out),aux->z1);
-	padic_val(out) = (slong)v;
-	padic_prec(out) = (slong)N;
 	padic_reduce(out,PadicContext);
 	return(0);
 }
@@ -430,46 +434,42 @@ static int UnpackPadic(PADIC_AUX *aux, padic_t out, WORD *fun)
  		#] UnpackPadic :
  		#[ PackPadic :
 
-	Packs a reduced FLINT p-adic value into FORM's internal representation:
+	Converts a FLINT's padic_t into FORM's internal padic notation:
 	    padic_(v,N,u)
-	where v and N are signed LONG arguments and u is a signed integer
-	argument encoded in the canonical FORM integer format.
+
+	Return value:
+	- the number of WORDs written to fun.
 */
-static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
+static int PackPadic(WORD *fun, padic_t in)
 {
 	WORD *t;
 	LONG v, N, small;
 	ULONG x;
-	int sign;
-	size_t count = 0;
-	UWORD *limbs = 0;
-	WORD nnum, i;
+	WORD *arg;
+	WORD nnum, nabs, i;
+	GETIDENTITY
 
 	/*
-		Normalize first so the serialized (v,N,u) triplet is canonical.
+		Normalize first so the (v,N,u) triplet is canonical.
 	*/
-	padic_set(aux->p4,in,PadicContext);
-	padic_reduce(aux->p4,PadicContext);
-	v = (LONG)padic_val(aux->p4);
-	N = (LONG)padic_prec(aux->p4);
-	/*
-		Convert the FLINT unit to GMP once; packing below reads aux->z1.
-	*/
-	fmpz_get_mpz(aux->z1,padic_unit(aux->p4));
+	padic_set(paux4,in,PadicContext);
+	padic_reduce(paux4,PadicContext);
+	v = (LONG)padic_val(paux4);
+	N = (LONG)padic_prec(paux4);
 
 	/*
-		Start the function record and then append the three arguments:
+		We now fill the function with the three arguments:
 		valuation v, precision N, and unit u.
 	*/
 	t = fun;
 	*t++ = PADICFUN;
-	t++; /* fun[1] (function length) is filled at the end. */
+	t++; // fun[1] (function length) is filled at the end.
 	FILLFUN(t);
 
 	/*
-		Pack valuation v as signed LONG:
+		Pack valuation v:
 		compact -SNUMBER when it fits in WORD, otherwise as a two-word
-		long integer argument (same encoding used for float_ exponents).
+		long integer argument.
 	*/
 	if ( v >= WORD_MIN_VALUE && v <= WORD_MAX_VALUE ) {
 		*t++ = -SNUMBER;
@@ -488,7 +488,7 @@ static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 		*t++ = (v < 0) ? -5 : 5;
 	}
 	/*
-		Pack precision N with the same signed LONG encoding.
+		Pack precision N.
 	*/
 	if ( N >= WORD_MIN_VALUE && N <= WORD_MAX_VALUE ) {
 		*t++ = -SNUMBER;
@@ -507,39 +507,31 @@ static int PackPadic(PADIC_AUX *aux, WORD *fun, padic_t in)
 		*t++ = (N < 0) ? -5 : 5;
 	}
 	/*
-		Pack unit u from mpz:
-		use -SNUMBER for small values, otherwise emit the canonical
-		FORM long-integer argument representation.
+		Pack unit u in the numerator of a FORM integer.
+		use -SNUMBER for small values, otherwise FORM long-integer.
 	*/
-	if ( mpz_fits_slong_p(aux->z1)
-	  && (small = (LONG)mpz_get_si(aux->z1),
+	if ( fmpz_fits_si(padic_unit(paux4))
+	  && (small = (LONG)fmpz_get_si(padic_unit(paux4)),
 	      small >= WORD_MIN_VALUE && small <= WORD_MAX_VALUE) ) {
 		*t++ = -SNUMBER;
 		*t++ = (WORD)small;
 	}
 	else {
-		/*
-			Long integer form:
-			- header + payload length
-			- absolute-value limbs (least-significant limb first)
-			- denominator 1 (as FORM rational format)
-			- signed numerator length in the final slot
-		*/
-		sign = mpz_sgn(aux->z1);
-		count = (size_t)((mpz_sizeinbase(aux->z1,2) + BITSINWORD - 1) / BITSINWORD);
-		limbs = (UWORD *)Malloc1(count*sizeof(UWORD),"PackPadic(unit)");
-		/* mpz_export ignores the sign; we store it separately in 'sign'. */
-		mpz_export(limbs,&count,-1,sizeof(UWORD),0,0,aux->z1);
-		nnum = (WORD)count;
-		*t++ = ARGHEAD + 2*nnum + 2;
-		*t++ = 0;
+		arg = t + ARGHEAD + 1;
+		// Numerator
+		nnum = flint_fmpz_get_form(padic_unit(paux4),arg);
+		nabs = ABS(nnum);
+		// Denominator 
+		arg += nabs;
+		*arg++ = 1;
+		for ( i = 1; i < nabs; i++ ) *arg++ = 0;
+		*arg++ = ( nnum < 0 ) ? -(2*nabs+1) : (2*nabs+1);
+		// Arghead etc.
+		*t++ = ARGHEAD + 2*nabs + 2;
+		*t++ = 0; 
 		FILLARG(t);
-		*t++ = 2*nnum + 2;
-		for ( i = 0; i < nnum; i++ ) *t++ = (WORD)limbs[i];
-		*t++ = 1;
-		for ( i = 1; i < nnum; i++ ) *t++ = 0;
-		*t++ = ( sign < 0 ) ? -(2*nnum+1) : (2*nnum+1);
-		M_free(limbs,"PackPadic(unit)");
+		*t++ = 2*nabs + 2;
+		t = arg;
 	}
 	fun[1] = t - fun;
 	return(fun[1]);
@@ -607,7 +599,7 @@ int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 	if ( !PadicActive ) return(-1);
 	FormRatToMpq(pauxq1,formrat,nrat);
 	padic_set_mpq(paux1,pauxq1,PadicContext);
-	PackPadic(PadicAux,outfun,paux1);
+	PackPadic(outfun,paux1);
 	return(0);
 }
 /*
@@ -626,12 +618,12 @@ int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 {
 	if ( !PadicActive ) return(-1);
-	if ( UnpackPadic(PadicAux,paux1,infun) ) return(-1);
+	if ( UnpackPadic(paux1,infun) ) return(-1);
 	FormRatToMpq(pauxq1,formrat,nrat);
 	padic_set_mpq(paux2,pauxq1,PadicContext);
 	padic_mul(paux3,paux1,paux2,PadicContext);
 	if ( padic_is_zero(paux3) ) return(1);
-	PackPadic(PadicAux,outfun,paux3);
+	PackPadic(outfun,paux3);
 	return(0);
 }
 /*
@@ -649,11 +641,11 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
 	if ( !PadicActive ) return(-1);
-	if ( UnpackPadic(PadicAux,paux1,fun1) ) return(-1);
-	if ( UnpackPadic(PadicAux,paux2,fun2) ) return(-1);
+	if ( UnpackPadic(paux1,fun1) ) return(-1);
+	if ( UnpackPadic(paux2,fun2) ) return(-1);
 	padic_mul(paux3,paux1,paux2,PadicContext);
 	if ( padic_is_zero(paux3) ) return(1);
-	PackPadic(PadicAux,fun3,paux3);
+	PackPadic(fun3,paux3);
 	return(0);
 }
 /*
@@ -666,8 +658,8 @@ int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
 	if ( !PadicActive ) return(-1);
-	if ( UnpackPadic(PadicAux,paux1,fun1) ) return(-1);
-	if ( UnpackPadic(PadicAux,paux2,fun2) ) return(-1);
+	if ( UnpackPadic(paux1,fun1) ) return(-1);
+	if ( UnpackPadic(paux2,fun2) ) return(-1);
 	if ( padic_is_zero(paux2) ) {
 		MLOCK(ErrorMessageLock);
 		MesPrint("Division by zero in p-adic arithmetic.");
@@ -676,7 +668,7 @@ int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 		return(-1);
 	}
 	padic_div(paux3,paux1,paux2,PadicContext);
-	PackPadic(PadicAux,fun3,paux3);
+	PackPadic(fun3,paux3);
 	return(0);
 }
 /*
@@ -924,7 +916,7 @@ int PrintPadic(WORD *fun,int numdigits)
 
 	if ( !PadicActive ) return(0);
 	aux = PadicAux;
-	if ( UnpackPadic(aux,aux->p1,fun) ) return(0);
+	if ( UnpackPadic(aux->p1,fun) ) return(0);
 
 	if ( numdigits > 0 && numdigits < digits ) digits = numdigits;
 
@@ -1068,7 +1060,7 @@ int ToPadic(PHEAD WORD *term, WORD level)
 	FormRatToMpq(aux->q1,(UWORD *)tstop,ncoef);
 	padic_set_mpq(aux->p1,aux->q1,PadicContext);
 	/* Overwrite the coefficient slot with padic_(v,N,u) and append 1/1. */
-	PackPadic(aux,tstop,aux->p1);
+	PackPadic(tstop,aux->p1);
 	tstop += tstop[1]; /* advance past the newly written padic_ record */
 	*tstop++ = 1;
 	*tstop++ = 1;
@@ -1111,7 +1103,7 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 		t += t[1];
 	}
 	if ( t < tstop ) {
-		if ( UnpackPadic(aux,aux->p1,t) ) return(1);
+		if ( UnpackPadic(aux->p1,t) ) return(1);
 		if ( padic_is_zero(aux->p1) ) return(0);
 		if ( PadicReconstructToMpq(aux->q1,aux->p1) ) {
 			/*
@@ -1184,15 +1176,15 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		/* Both coefficients are padic_: unpack and apply external +/- sign. */
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
-		UnpackPadic(aux,aux->p1,fun1);
+		UnpackPadic(aux->p1,fun1);
 		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
-		UnpackPadic(aux,aux->p2,fun2);
+		UnpackPadic(aux->p2,fun2);
 		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 1 ) {
 		/* First coefficient is padic_, second is rational. */
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
-		UnpackPadic(aux,aux->p1,fun1);
+		UnpackPadic(aux->p1,fun1);
 		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
 		FormRatToMpq(aux->q1,(UWORD *)coef2,size2);
 		padic_set_mpq(aux->p2,aux->q1,PadicContext);
@@ -1200,7 +1192,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 	else if ( AT.SortPadicMode == 2 ) {
 		/* Second coefficient is padic_, first is rational. */
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
-		UnpackPadic(aux,aux->p2,fun2);
+		UnpackPadic(aux->p2,fun2);
 		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
 		FormRatToMpq(aux->q1,(UWORD *)coef1,size1);
 		padic_set_mpq(aux->p1,aux->q1,PadicContext);
@@ -1222,7 +1214,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 	}
 
 	fun3 = TermMalloc("AddWithPadic");
-	PackPadic(aux,fun3,aux->p3);
+	PackPadic(fun3,aux->p3);
 
 	if ( AT.SortPadicMode == 3 ) {
 		/* Prefer overwriting an existing padic_ record in-place if it fits. */
@@ -1304,14 +1296,14 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 	if ( AT.SortPadicMode == 3 ) {
 		fun1 = term1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		fun2 = term2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
-		UnpackPadic(aux,aux->p1,fun1);
+		UnpackPadic(aux->p1,fun1);
 		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
-		UnpackPadic(aux,aux->p2,fun2);
+		UnpackPadic(aux->p2,fun2);
 		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 1 ) {
 		fun1 = term1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
-		UnpackPadic(aux,aux->p1,fun1);
+		UnpackPadic(aux->p1,fun1);
 		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
 		FormRatToMpq(aux->q1,(UWORD *)coef2,size2);
 		padic_set_mpq(aux->p2,aux->q1,PadicContext);
@@ -1320,7 +1312,7 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 		fun2 = term2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		FormRatToMpq(aux->q1,(UWORD *)coef1,size1);
 		padic_set_mpq(aux->p1,aux->q1,PadicContext);
-		UnpackPadic(aux,aux->p2,fun2);
+		UnpackPadic(aux->p2,fun2);
 		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
 	}
 	else {
@@ -1338,7 +1330,7 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 	}
 
 	fun3 = TermMalloc("MergeWithPadic");
-	PackPadic(aux,fun3,aux->p3);
+	PackPadic(fun3,aux->p3);
 		if ( AT.SortPadicMode == 3 ) {
 			if ( fun1[1] + ABS(size1) == fun3[1] + 3 ) {
 OnTopOf1:
