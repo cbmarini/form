@@ -82,10 +82,9 @@ typedef struct PADIC_AUX_ {
 	padic_t p3;
 	/* Used by PackPadic() to build a canonical (reduced) representation. */
 	padic_t p4;
-	/* Scratch rational used by FORM <-> padic/mpq conversions. */
-	mpq_t q1;
-	/* Scratch integers used by PackPadic()/UnpackPadic() and coefficient conversions. */
-	mpz_t z1;
+	/* Scratch rational used by FORM <-> padic/fmpq conversions. */
+	fmpq_t q1;
+	/* Scratch integer used by list-format printing. */
 	mpz_t z2;
 } PADIC_AUX;
 
@@ -99,7 +98,6 @@ typedef struct PADIC_AUX_ {
 #define paux3 (PadicAux->p3)
 #define paux4 (PadicAux->p4)
 #define pauxq1 (PadicAux->q1)
-#define pauxz1 (PadicAux->z1)
 #define pauxz2 (PadicAux->z2)
 
 /*
@@ -113,8 +111,7 @@ static void InitPadicAux(PADIC_AUX *aux, LONG prec)
 	padic_init2(aux->p2, (slong)prec);
 	padic_init2(aux->p3, (slong)prec);
 	padic_init2(aux->p4, (slong)prec);
-	mpq_init(aux->q1);
-	mpz_init(aux->z1);
+	fmpq_init(aux->q1);
 	mpz_init(aux->z2);
 }
 /*
@@ -127,8 +124,7 @@ static void ClearSinglePadicAux(PADIC_AUX *aux)
 	padic_clear(aux->p2);
 	padic_clear(aux->p3);
 	padic_clear(aux->p4);
-	mpq_clear(aux->q1);
-	mpz_clear(aux->z1);
+	fmpq_clear(aux->q1);
 	mpz_clear(aux->z2);
 }
 /*
@@ -540,55 +536,43 @@ static int PackPadic(WORD *fun, padic_t in)
  		#] PackPadic :
   	#] Internal p-adic function format :
   	#[ Rekenen :
- 		#[ FormRatToMpq :
+		#[ FormRatToFmpq :
 
 	Converts the internal FORM rational coefficient encoding (formrat/ratsize)
-	to a GMP rational.
+	to a FLINT rational fmpq.
 
-	The coefficient format is:
-	- ratsize is a signed length code of the form +/- (2*n+1)
-	- formrat[0..n-1] holds |numerator| as base-2^BITSINWORD limbs
-	- formrat[n..2*n-1] holds denominator limbs (padded)
-	- the sign of the rational is carried in the sign of ratsize
-	- the final slot formrat[2*n] stores ABS(ratsize)
+	Maybe this should be moved to flintinterface.cc?
 */
-static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
+static void FormRatToFmpq(fmpq_t result, UWORD *formrat, WORD ratsize)
 {
 	WORD nnum, nden;
 	UWORD *num, *den;
 	int sign = 1;
-	mpz_t znum, zden;
-
-	mpz_init(znum);
-	mpz_init(zden);
 
 	if ( ratsize < 0 ) {
-		ratsize = -ratsize;
 		sign = -1;
+		ratsize = -ratsize;
 	}
+
 	nnum = nden = (ratsize-1)/2;
 	num = formrat;
 	den = formrat + nnum;
-	/* Trim leading zero limbs (FORM coefficients are padded). */
+	/* Remove padding */
 	while ( nnum > 0 && num[nnum-1] == 0 ) nnum--;
 	while ( nden > 0 && den[nden-1] == 0 ) nden--;
 
-	if ( nnum > 0 ) mpz_import(znum,(size_t)nnum,-1,sizeof(UWORD),0,0,num);
-	else            mpz_set_ui(znum,0UL);
-	if ( nden > 0 ) mpz_import(zden,(size_t)nden,-1,sizeof(UWORD),0,0,den);
-	else            mpz_set_ui(zden,1UL);
+	if ( nnum > 0 ) {
+		flint_fmpz_set_form(fmpq_numref(result),num,sign*nnum);
+	}
+	else {
+		fmpz_zero(fmpq_numref(result));
+	}
+	flint_fmpz_set_form(fmpq_denref(result),den,nden);
 
-	if ( sign < 0 ) mpz_neg(znum,znum);
-
-	mpq_set_num(result,znum);
-	mpq_set_den(result,zden);
-	mpq_canonicalize(result);
-
-	mpz_clear(zden);
-	mpz_clear(znum);
+	fmpq_canonicalise(result);
 }
 /*
- 		#] FormRatToMpq :
+		#] FormRatToFmpq :
  		#[ RatToPadicFun :
 
 	Converts a FORM rational coefficient (formrat/nrat) to a `padic_` function
@@ -597,8 +581,8 @@ static void FormRatToMpq(mpq_t result, UWORD *formrat, WORD ratsize)
 int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
 {
 	if ( !PadicActive ) return(-1);
-	FormRatToMpq(pauxq1,formrat,nrat);
-	padic_set_mpq(paux1,pauxq1,PadicContext);
+	FormRatToFmpq(pauxq1,formrat,nrat);
+	padic_set_fmpq(paux1,pauxq1,PadicContext);
 	PackPadic(outfun,paux1);
 	return(0);
 }
@@ -619,8 +603,8 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 {
 	if ( !PadicActive ) return(-1);
 	if ( UnpackPadic(paux1,infun) ) return(-1);
-	FormRatToMpq(pauxq1,formrat,nrat);
-	padic_set_mpq(paux2,pauxq1,PadicContext);
+	FormRatToFmpq(pauxq1,formrat,nrat);
+	padic_set_fmpq(paux2,pauxq1,PadicContext);
 	padic_mul(paux3,paux1,paux2,PadicContext);
 	if ( padic_is_zero(paux3) ) return(1);
 	PackPadic(outfun,paux3);
@@ -630,8 +614,8 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
  		#] MulRatToPadic :
  		#[ MulPadics :
 
-	Multiplies two internal `padic_` function records and stores the product
-	as a new `padic_` record in fun3.
+	Multiplies two padic_ functions (fun1 and fun2) and stores the
+	product as a new padic_ function in fun3.
 
 	Return value:
 	- 0  on success, with a non-zero product packed into fun3,
@@ -673,20 +657,20 @@ int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 }
 /*
  		#] DivPadics :
- 		#[ MpqToFormRat :
+		#[ FmpqToFormRat :
 
-	Converts a GMP rational to FORM's internal rational coefficient encoding.
+	Converts a FLINT rational to FORM's internal rational coefficient encoding.
 
 	If out is 0, this routine only computes the signed size code in *nratout.
 	Returns -1 when the result does not fit in FORM's encoding bounds.
 */
-static int MpqToFormRat(UWORD *out, WORD *nratout, mpq_t q)
+static int FmpqToFormRat(UWORD *out, WORD *nratout, fmpq_t q)
 {
 	int sign;
-	size_t nnum, nden, n, i, count;
-	mpz_t znum;
+	size_t nnum, nden, n, i;
+	fmpz_t z;
 
-	sign = mpq_sgn(q);
+	sign = fmpq_sgn(q);
 	if ( sign == 0 ) {
 		*nratout = 3;
 		if ( out != 0 ) {
@@ -697,10 +681,10 @@ static int MpqToFormRat(UWORD *out, WORD *nratout, mpq_t q)
 		return(0);
 	}
 
-	nnum = (mpz_sgn(mpq_numref(q)) == 0) ? 0 :
-		(size_t)((mpz_sizeinbase(mpq_numref(q),2) + BITSINWORD - 1) / BITSINWORD);
-	nden = (mpz_sgn(mpq_denref(q)) == 0) ? 0 :
-		(size_t)((mpz_sizeinbase(mpq_denref(q),2) + BITSINWORD - 1) / BITSINWORD);
+	nnum = fmpz_is_zero(fmpq_numref(q)) ? 0 :
+		(size_t)((fmpz_sizeinbase(fmpq_numref(q),2) + BITSINWORD - 1) / BITSINWORD);
+	nden = fmpz_is_zero(fmpq_denref(q)) ? 0 :
+		(size_t)((fmpz_sizeinbase(fmpq_denref(q),2) + BITSINWORD - 1) / BITSINWORD);
 	if ( nden == 0 ) return(-1);
 	n = ( nnum > nden ) ? nnum : nden;
 	if ( n > (size_t)((WORD_MAX_VALUE-1)/2) ) return(-1);
@@ -711,33 +695,31 @@ static int MpqToFormRat(UWORD *out, WORD *nratout, mpq_t q)
 
 	for ( i = 0; i < 2*n; i++ ) out[i] = 0;
 
-	mpz_init(znum);
-	mpz_set(znum,mpq_numref(q));
-	if ( mpz_sgn(znum) < 0 ) mpz_neg(znum,znum);
+	fmpz_init(z);
 	if ( nnum > 0 ) {
-		count = nnum;
-		mpz_export(out,&count,-1,sizeof(UWORD),0,0,znum);
+		fmpz_abs(z,fmpq_numref(q));
+		flint_fmpz_get_form(z,(WORD *)out);
 	}
 	if ( nden > 0 ) {
-		count = nden;
-		mpz_export(out+n,&count,-1,sizeof(UWORD),0,0,mpq_denref(q));
+		fmpz_set(z,fmpq_denref(q));
+		flint_fmpz_get_form(z,(WORD *)(out+n));
 	}
-	mpz_clear(znum);
+	fmpz_clear(z);
 	out[2*n] = (UWORD)ABS(*nratout);
 	return(0);
 }
 /*
- 		#] MpqToFormRat :
- 		#[ PadicReconstructToMpq :
+		#] FmpqToFormRat :
+		#[ PadicReconstructToFmpq :
 
 		Reconstructs a small rational from a reduced p-adic value using FLINT's
 		rational reconstruction and applies the p-adic valuation afterwards.
 
 		This is a "best effort" conversion used by PadicToRat(): if reconstruction
 		fails (not unique for the current modulus), the caller can fall back to a
-		canonical lift via padic_get_mpq().
+		canonical lift via padic_get_fmpq().
  */
-static int PadicReconstructToMpq(mpq_t out, padic_t in)
+static int PadicReconstructToFmpq(fmpq_t out, padic_t in)
 {
 	fmpz_t residue, modulus, ppower;
 	fmpq_t recon;
@@ -768,7 +750,7 @@ static int PadicReconstructToMpq(mpq_t out, padic_t in)
 		fmpq_div_fmpz(recon,recon,ppower);
 	}
 
-	fmpq_get_mpq(out,recon);
+	fmpq_set(out,recon);
 
 ClearAndReturn:
 	fmpq_clear(recon);
@@ -778,7 +760,7 @@ ClearAndReturn:
 	return(ok ? 0 : -1);
 }
 /*
- 		#] PadicReconstructToMpq :
+		#] PadicReconstructToFmpq :
   	#] Rekenen :
   	#[ Printing :
  		#[ EnsurePadicPrintBuffer :
@@ -929,8 +911,8 @@ int PrintPadic(WORD *fun,int numdigits)
 		padic_t short_x;
 		padic_ctx_init(short_ctx,PadicContext->p,0,(slong)digits,PADIC_SERIES);
 		padic_init2(short_x,digits);
-		padic_get_mpq(aux->q1,aux->p1,PadicContext);
-		padic_set_mpq(short_x,aux->q1,short_ctx);
+		padic_get_fmpq(aux->q1,aux->p1,PadicContext);
+		padic_set_fmpq(short_x,aux->q1,short_ctx);
 		if ( mode == PADICPRINTLIST ) {
 			int outlen = PrintPadicList(aux,short_x);
 			padic_clear(short_x);
@@ -990,7 +972,7 @@ int CoToPadic(UBYTE *s)
 	}
 	while ( *s == ' ' || *s == ',' || *s == '\t' ) s++;
 	if ( *s ) {
-		MesPrint("&Illegal argument(s) in Topadic statement: '%s'",s);
+		MesPrint("&Illegal argument(s) in ToPadic statement: '%s'",s);
 		return(1);
 	}
 	Add2Com(TYPETOPADIC);
@@ -1015,7 +997,7 @@ int CoPadicToRat(UBYTE *s)
 		MesPrint("&Illegal argument(s) in PadicToRat statement: '%s'",s);
 		return(1);
 	}
-	Add2Com(TYPETOPADICTORAT);
+	Add2Com(TYPEPADICTORAT);
 	return(0);
 }
 /*
@@ -1032,36 +1014,32 @@ int CoPadicToRat(UBYTE *s)
 int ToPadic(PHEAD WORD *term, WORD level)
 {
 	GETBIDENTITY
-	PADIC_AUX *aux;
-	WORD *t, *scan, *tstop, nsize, ncoef;
+	WORD *t, *tstop, nsize, ncoef;
 
 	if ( !PadicActive ) return(1);
-	aux = PadicAux;
 
 	t = term + *term;
-	ncoef = t[-1];          /* signed length code of the coefficient */
-	nsize = ABS(ncoef);     /* number of WORDs occupied by the coefficient */
-	tstop = t - nsize;      /* points to the start of the coefficient */
+	ncoef = t[-1];          
+	nsize = ABS(ncoef);     
+	tstop = t - nsize;      
 
-	if ( nsize == 3 && tstop[0] == 1 && tstop[1] == 1 ) {
-		/*
-			The coefficient is +/-1. If there is already a single proper padic_
-			record as the last commuting function, we are done.
-		*/
-		scan = term + 1;
-		while ( scan < tstop ) {
-			if ( *scan == PADICFUN && scan + scan[1] == tstop && TestPadic(scan) ) {
+	if ( nsize == 3 && t[-2] == 1 && tstop[-3] == 1 ) {
+		/* If there is already a padic_ we are done. */
+		t = term + 1;
+		while ( t < tstop ) {
+			if ( *t == PADICFUN && (t+t[1] == tstop) && TestPadic(t) ) {
 				return(Generator(BHEAD term,level));
 			}
-			scan += scan[1]; /* advance to the next function in the term */
+			t += t[1]; /* advance to the next function in the term */
 		}
 	}
 
-	FormRatToMpq(aux->q1,(UWORD *)tstop,ncoef);
-	padic_set_mpq(aux->p1,aux->q1,PadicContext);
-	/* Overwrite the coefficient slot with padic_(v,N,u) and append 1/1. */
-	PackPadic(tstop,aux->p1);
-	tstop += tstop[1]; /* advance past the newly written padic_ record */
+	FormRatToFmpq(pauxq1,(UWORD *)tstop,ncoef);
+	padic_set_fmpq(paux1,pauxq1,PadicContext);
+	// Overwrite the old rational coefficient of the term by padic_(v,N,u) 
+	// and append rational coefficient 1/1.
+	PackPadic(tstop,paux1);
+	tstop += tstop[1]; /* advance past the newly written padic_ */
 	*tstop++ = 1;
 	*tstop++ = 1;
 	*tstop++ = 3;
@@ -1105,14 +1083,14 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 	if ( t < tstop ) {
 		if ( UnpackPadic(aux->p1,t) ) return(1);
 		if ( padic_is_zero(aux->p1) ) return(0);
-		if ( PadicReconstructToMpq(aux->q1,aux->p1) ) {
+		if ( PadicReconstructToFmpq(aux->q1,aux->p1) ) {
 			/*
 				No unique small reconstruction exists for the current precision.
 				Fall back to FLINT's canonical lift.
 			*/
-			padic_get_mpq(aux->q1,aux->p1,PadicContext);
+			padic_get_fmpq(aux->q1,aux->p1,PadicContext);
 		}
-		if ( MpqToFormRat(0,&ncoef,aux->q1) ) goto RatFailure;
+		if ( FmpqToFormRat(0,&ncoef,aux->q1) ) goto RatFailure;
 		stop = (WORD *)(((UBYTE *)term) + AM.MaxTer);
 		if ( t + ABS(ncoef) > stop ) {
 			MLOCK(ErrorMessageLock);
@@ -1122,7 +1100,7 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 			Terminate(-1);
 			return(1);
 		}
-		if ( MpqToFormRat((UWORD *)t,&ncoef,aux->q1) ) goto RatFailure;
+		if ( FmpqToFormRat((UWORD *)t,&ncoef,aux->q1) ) goto RatFailure;
 		if ( t[0] == 0 && t[1] == 1 && ncoef == 3 ) return(0);
 		t += ABS(ncoef);
 		t[-1] = ncoef*nsign;
@@ -1186,16 +1164,16 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		UnpackPadic(aux->p1,fun1);
 		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
-		FormRatToMpq(aux->q1,(UWORD *)coef2,size2);
-		padic_set_mpq(aux->p2,aux->q1,PadicContext);
+		FormRatToFmpq(aux->q1,(UWORD *)coef2,size2);
+		padic_set_fmpq(aux->p2,aux->q1,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
 		/* Second coefficient is padic_, first is rational. */
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		UnpackPadic(aux->p2,fun2);
 		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
-		FormRatToMpq(aux->q1,(UWORD *)coef1,size1);
-		padic_set_mpq(aux->p1,aux->q1,PadicContext);
+		FormRatToFmpq(aux->q1,(UWORD *)coef1,size1);
+		padic_set_fmpq(aux->p1,aux->q1,PadicContext);
 	}
 	else {
 		MLOCK(ErrorMessageLock);
@@ -1305,13 +1283,13 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 		fun1 = term1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		UnpackPadic(aux->p1,fun1);
 		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
-		FormRatToMpq(aux->q1,(UWORD *)coef2,size2);
-		padic_set_mpq(aux->p2,aux->q1,PadicContext);
+		FormRatToFmpq(aux->q1,(UWORD *)coef2,size2);
+		padic_set_fmpq(aux->p2,aux->q1,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
 		fun2 = term2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
-		FormRatToMpq(aux->q1,(UWORD *)coef1,size1);
-		padic_set_mpq(aux->p1,aux->q1,PadicContext);
+		FormRatToFmpq(aux->q1,(UWORD *)coef1,size1);
+		padic_set_fmpq(aux->p1,aux->q1,PadicContext);
 		UnpackPadic(aux->p2,fun2);
 		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
 	}

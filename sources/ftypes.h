@@ -604,7 +604,7 @@ typedef int (*TFUN1)(UBYTE *,int);
 #endif
 #ifdef WITHPADIC
 #define TYPETOPADIC 93
-#define TYPETOPADICTORAT 94
+#define TYPEPADICTORAT 94
 #endif
 
 /*
