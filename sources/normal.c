@@ -251,6 +251,7 @@ int Normalize(PHEAD WORD *term)
 	WORD withpadic = 0;
 	WORD *firstpadic = 0;
 	WORD *padicaccum = 0;
+	int padicret;
 #endif
 	LONG oldcpointer = 0, x;
 	n_coef = TermMalloc("NormCoef");
@@ -2450,14 +2451,14 @@ redoshort:
 						firstpadic = t;
 					}
 					else if ( withpadic == 1 ) {
-						k = MulPadics(BHEAD padicaccum,firstpadic,t);
-						if ( k < 0 ) goto FromNorm;
-						if ( k > 0 ) goto NormZero;
+						padicret = MulPadics(BHEAD padicaccum,firstpadic,t);
+						if ( padicret < 0 ) goto FromNorm;
+						if ( padicret > 0 ) goto NormZero;
 					}
 					else {
-						k = MulPadics(BHEAD padicaccum,padicaccum,t);
-						if ( k < 0 ) goto FromNorm;
-						if ( k > 0 ) goto NormZero;
+						padicret = MulPadics(BHEAD padicaccum,padicaccum,t);
+						if ( padicret < 0 ) goto FromNorm;
+						if ( padicret > 0 ) goto NormZero;
 					}
 					withpadic++;
 				}
@@ -2828,23 +2829,21 @@ TryAgain:;
 #endif
 #ifdef WITHPADIC
 					else if ( *t == PADICFUN && TestPadic(t) ) {
-						static UWORD one[] = { 1, 1 };
 						k = t[1];
 						pden[i][1] -= k;
 						pden[i][FUNHEAD] -= k;
 						pden[i][FUNHEAD+ARGHEAD] -= k;
 						if ( withpadic == 0 ) {
-							if ( RatToPadicFun(BHEAD padicaccum,one,3) ) goto FromNorm;
-							if ( DivPadics(BHEAD padicaccum,padicaccum,t) ) goto FromNorm;
+							padicret = InvPadic(BHEAD padicaccum,t);
+							if ( padicret < 0 ) goto FromNorm;
+							if ( padicret > 0 ) goto NormZero;
 							withpadic = 2;
 						}
 						else {
-							if ( withpadic == 1 ) {
-								if ( DivPadics(BHEAD padicaccum,firstpadic,t) ) goto FromNorm;
-							}
-							else {
-								if ( DivPadics(BHEAD padicaccum,padicaccum,t) ) goto FromNorm;
-							}
+							padicret = DivPadics(BHEAD padicaccum,
+								(withpadic == 1) ? firstpadic : padicaccum,t);
+							if ( padicret < 0 ) goto FromNorm;
+							if ( padicret > 0 ) goto NormZero;
 							withpadic++;
 						}
 						tt = to = t;
@@ -4177,35 +4176,27 @@ NoRep:
 	}
 	else AT.FloatPos = 0;
 #endif
-#ifdef WITHPADIC
-	if ( withpadic ) {
-		WORD padicsign = (ncoef < 0) ? -3 : 3;
-/*
-		First check whether the coefficient is already 1/1.
-*/
-		if ( ABS(ncoef) == 3 && n_coef[0] == 1 && n_coef[1] == 1 ) {
-			AT.PadicPos = m-termout;
-			if ( withpadic == 1 ) {
-				i = firstpadic[1];
-				NCOPY(m,firstpadic,i)
+	#ifdef WITHPADIC
+		if ( withpadic ) {
+			WORD *padicfunction = (withpadic == 1) ? firstpadic : padicaccum;
+	/*
+			First check whether the coefficient is already 1/1.
+	*/
+			if ( ncoef == 3 && n_coef[0] == 1 && n_coef[1] == 1 ) {
+				AT.PadicPos = m-termout;
+				i = padicfunction[1];
+				NCOPY(m,padicfunction,i)
 			}
 			else {
-				i = padicaccum[1];
-				NCOPY(m,padicaccum,i)
+				padicret = MulRatToPadic(BHEAD m,padicfunction,(UWORD *)n_coef,ncoef);
+				if ( padicret < 0 ) goto FromNorm;
+				if ( padicret > 0 ) goto NormZero;
+				AT.PadicPos = m-termout;
+				m += m[1];
 			}
+			n_coef[0] = 1; n_coef[1] = 1; ncoef = 3;
 		}
-		else {
-			WORD *source = (withpadic == 1) ? firstpadic : padicaccum;
-			k = MulRatToPadic(BHEAD m,source,(UWORD *)n_coef,ncoef);
-			if ( k < 0 ) goto FromNorm;
-			if ( k > 0 ) goto NormZero;
-			AT.PadicPos = m-termout;
-			m += m[1];
-			padicsign = 3;
-		}
-		n_coef[0] = 1; n_coef[1] = 1; ncoef = padicsign;
-	}
-	else AT.PadicPos = 0;
+		else AT.PadicPos = 0;
 #endif
 
 /*

@@ -573,21 +573,6 @@ static void FormRatToFmpq(fmpq_t result, UWORD *formrat, WORD ratsize)
 }
 /*
 		#] FormRatToFmpq :
- 		#[ RatToPadicFun :
-
-	Converts a FORM rational coefficient (formrat/nrat) to a `padic_` function
-	record written at outfun.
-*/
-int RatToPadicFun(PHEAD WORD *outfun, UWORD *formrat, WORD nrat)
-{
-	if ( !PadicActive ) return(-1);
-	FormRatToFmpq(pauxq1,formrat,nrat);
-	padic_set_fmpq(paux1,pauxq1,PadicContext);
-	PackPadic(outfun,paux1);
-	return(0);
-}
-/*
- 		#] RatToPadicFun :
  		#[ MulRatToPadic :
 
 	Multiplies an existing `padic_` coefficient by a FORM rational coefficient.
@@ -606,15 +591,15 @@ int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 	FormRatToFmpq(pauxq1,formrat,nrat);
 	padic_set_fmpq(paux2,pauxq1,PadicContext);
 	padic_mul(paux3,paux1,paux2,PadicContext);
-	if ( padic_is_zero(paux3) ) return(1);
 	PackPadic(outfun,paux3);
+	if ( padic_is_zero(paux3) ) return(1);
 	return(0);
 }
 /*
  		#] MulRatToPadic :
  		#[ MulPadics :
 
-	Multiplies two padic_ functions (fun1 and fun2) and stores the
+	Multiplies two padic_ functions (fun1 * fun2) and stores the
 	product as a new padic_ function in fun3.
 
 	Return value:
@@ -628,16 +613,22 @@ int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 	if ( UnpackPadic(paux1,fun1) ) return(-1);
 	if ( UnpackPadic(paux2,fun2) ) return(-1);
 	padic_mul(paux3,paux1,paux2,PadicContext);
-	if ( padic_is_zero(paux3) ) return(1);
 	PackPadic(fun3,paux3);
+	if ( padic_is_zero(paux3) ) return(1);
 	return(0);
 }
 /*
  		#] MulPadics :
  		#[ DivPadics :
 
-	Divides two internal `padic_` records (fun1 / fun2). Division by zero is
-	a fatal runtime error, matching FORM's behavior for coefficient arithmetic.
+	Divides two padic_ functions (fun1 / fun2) and stores the
+	quotient as a new padic_ function in fun3.
+	Division by zero is a fatal runtime error.
+
+	Return value:
+	- 0  on success, with a non-zero quotient packed into fun3,
+	- 1  if the quotient is p-adic zero,
+	- -1 on runtime/validation failure.
 */
 int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
@@ -653,10 +644,39 @@ int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 	}
 	padic_div(paux3,paux1,paux2,PadicContext);
 	PackPadic(fun3,paux3);
+	if ( padic_is_zero(paux3) ) return(1);
 	return(0);
 }
 /*
  		#] DivPadics :
+		#[ InvPadic :
+
+	Computes the inverse 1/fun and stores the result as a new padic_ function
+	in outfun. Division by zero is a fatal runtime error.
+
+	Return value:
+	- 0  on success, with a non-zero inverse packed into outfun,
+	- 1  if the inverse is p-adic zero,
+	- -1 on runtime/validation failure.
+*/
+int InvPadic(PHEAD WORD *outfun, WORD *fun)
+{
+	if ( !PadicActive ) return(-1);
+	if ( UnpackPadic(paux1,fun) ) return(-1);
+	if ( padic_is_zero(paux1) ) {
+		MLOCK(ErrorMessageLock);
+		MesPrint("Division by zero in p-adic arithmetic.");
+		MUNLOCK(ErrorMessageLock);
+		Terminate(-1);
+		return(-1);
+	}
+	padic_inv(paux3,paux1,PadicContext);
+	PackPadic(outfun,paux3);
+	if ( padic_is_zero(paux3) ) return(1);
+	return(0);
+}
+/*
+		#] InvPadic :
 		#[ FmpqToFormRat :
 
 	Converts a FLINT rational to FORM's internal rational coefficient encoding.
@@ -1006,10 +1026,10 @@ int CoPadicToRat(UBYTE *s)
 
 	Runtime implementation of `ToPadic;`.
 
-	This replaces the current term coefficient by an explicit `padic_` function
-	record and resets the coefficient to 1/1 (the sign is absorbed into the
-	p-adic value). If the coefficient is already +/-1 and the term already ends
-	with a proper padic_ record, the statement is effectively a no-op.
+	This replaces the current rational coefficient by an explicit padic_ function
+	and sets the rational coefficient to 1/1. The sign is absorbed into the
+	p-adic value. If the coefficient is already 1/1 and the term already ends
+	with a proper padic_ function we are done immediately.
 */
 int ToPadic(PHEAD WORD *term, WORD level)
 {
@@ -1023,8 +1043,8 @@ int ToPadic(PHEAD WORD *term, WORD level)
 	nsize = ABS(ncoef);     
 	tstop = t - nsize;      
 
-	if ( nsize == 3 && t[-2] == 1 && tstop[-3] == 1 ) {
-		/* If there is already a padic_ we are done. */
+	/* If there is already a proper padic_, with rational coefficient 1/1 we are done. */
+	if ( ncoef == 3 && t[-2] == 1 && t[-3] == 1 ) {
 		t = term + 1;
 		while ( t < tstop ) {
 			if ( *t == PADICFUN && (t+t[1] == tstop) && TestPadic(t) ) {

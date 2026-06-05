@@ -1786,7 +1786,7 @@ int AddWithPadic(PHEAD WORD **,WORD **);
 int MergeWithPadic(PHEAD WORD **,WORD **);
 int MulPadics(PHEAD WORD *, WORD *, WORD *);
 int DivPadics(PHEAD WORD *, WORD *, WORD *);
-int RatToPadicFun(PHEAD WORD *, UWORD *, WORD);
+int InvPadic(PHEAD WORD *, WORD *);
 int MulRatToPadic(PHEAD WORD *, WORD *, UWORD *, WORD);
 int TestPadic(WORD *);
 #endif
