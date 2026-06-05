@@ -1636,6 +1636,8 @@ extern void  poly_free_poly_vars(PHEAD const char *);
 #ifdef WITHFLINT
 extern void  flint_final_cleanup_thread(void);
 extern void  flint_final_cleanup_master(void);
+extern WORD  flint_fmpz_get_form(void *, WORD *);
+extern void  flint_fmpz_set_form(void *, UWORD *, WORD);
 extern WORD* flint_div(PHEAD WORD *, WORD *, const WORD);
 extern int   flint_factorize_argument(PHEAD WORD *, WORD *);
 extern WORD* flint_factorize_dollar(PHEAD WORD *);
