@@ -216,11 +216,14 @@ int PadicIsPrime(LONG p)
 	This function:
 	- clears the previous context if active,
 	- initializes FLINT's padic_ctx_struct for (p,N),
-	- allocates per-thread scratch objects (AT.padic_aux_ / AB[id]->T.padic_aux_).
+	- allocates per-thread scratch objects (AT.padic_aux_ / AB[id]->T.padic_aux_),
+	- allocate buffer space for an output string.
 */
 int StartPadicSystem(LONG p, LONG N)
 {
 	fmpz_t prime;
+	size_t digits_p, digits_exp, maxabs;
+	unsigned long pp;
 	if ( p <= 1 || N <= 0 ) return(1);
 	if ( PadicActive ) { // Clear the previous padic system
 		ClearPadicSystem();
@@ -232,6 +235,26 @@ int StartPadicSystem(LONG p, LONG N)
 	padic_ctx_init(PadicContext,prime,0,(slong)N,PADIC_SERIES);
 	fmpz_clear(prime);
 	AllocatePadicAux();
+
+	// Allocate buffer space for an output string
+	if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
+	AO.padicncoeffs = N;
+
+	pp = (unsigned long)p;
+	digits_p = 1;
+	while ( pp >= 10 ) {
+		pp /= 10;
+		digits_p++;
+	}
+	maxabs = (size_t)N;
+	digits_exp = 1;
+	while ( maxabs >= 10 ) {
+		maxabs /= 10;
+		digits_exp++;
+	}
+	AO.padicsize = (LONG)((size_t)AO.padicncoeffs*(2*digits_p + digits_exp + 5) + 3);
+	AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
+
 	PadicActive = 1;
 	return(0);
 }
@@ -260,8 +283,9 @@ void ClearPadicSystem(void)
 	if ( AO.padicspace ) {
 		M_free(AO.padicspace,"padicspace");
 		AO.padicspace = 0;
-		AO.padicsize = 0;
 	}
+	AO.padicsize = 0;
+	AO.padicncoeffs = 0;
 }
 /*
  		#] ClearPadicSystem :
@@ -783,19 +807,6 @@ ClearAndReturn:
 		#] PadicReconstructToFmpq :
   	#] Rekenen :
   	#[ Printing :
- 		#[ EnsurePadicPrintBuffer :
-*/
-static int EnsurePadicPrintBuffer(size_t need)
-{
-	if ( AO.padicspace == 0 || AO.padicsize <= (LONG)need ) {
-		if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
-		AO.padicsize = (LONG)need + 32;
-		AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
-	}
-	return(AO.padicspace == 0 ? -1 : 0);
-}
-/*
- 		#] EnsurePadicPrintBuffer :
  		#[ CountULongDigits :
 */
 static size_t CountULongDigits(unsigned long x)
@@ -831,7 +842,12 @@ static int PrintPadicList(PADIC_AUX *aux, padic_t in)
 		n = (size_t)snprintf(prefix,sizeof(prefix),"padic[%ld,0,%ld,{0}]",
 			(long)PadicPrime,(long)PadicPrecision);
 		if ( n >= sizeof(prefix) ) return(0);
-		if ( EnsurePadicPrintBuffer(n) ) return(0);
+		if ( AO.padicspace == 0 || AO.padicsize <= (LONG)n ) {
+			if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
+			AO.padicsize = (LONG)n + 1;
+			AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
+		}
+		if ( AO.padicspace == 0 ) return(0);
 		memcpy((char *)AO.padicspace,prefix,n+1);
 		return((int)n);
 	}
@@ -859,7 +875,12 @@ static int PrintPadicList(PADIC_AUX *aux, padic_t in)
 		if ( i + 1 < coeff_count ) total_len++;
 	}
 
-	if ( EnsurePadicPrintBuffer(total_len) ) {
+	if ( AO.padicspace == 0 || AO.padicsize <= (LONG)total_len ) {
+		if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
+		AO.padicsize = (LONG)total_len + 1;
+		AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
+	}
+	if ( AO.padicspace == 0 ) {
 		mpz_clear(pz);
 		mpz_clear(rem);
 		mpz_clear(work);
@@ -891,9 +912,58 @@ static int PrintPadicList(PADIC_AUX *aux, padic_t in)
 }
 /*
  		#] PrintPadicList :
+		#[ PrintPadicSeries :
+*/
+static int PrintPadicSeries(padic_t in, padic_ctx_t ctx)
+{
+	char *out, *series;
+	slong v, N;
+	size_t n, digits_p, digits_exp, maxabs;
+	unsigned long p;
+	LONG ncoeffs;
+
+	v = padic_val(in);
+	N = padic_prec(in);
+
+	if ( N <= v ) ncoeffs = 1;
+	else ncoeffs = (LONG)(N-v);
+
+	/* Grow the cached print buffer only if this value needs more coefficients. */
+	if ( ncoeffs > AO.padicncoeffs ) {
+		p = (unsigned long)PadicPrime;
+		digits_p = 1;
+		while ( p >= 10 ) {
+			p /= 10;
+			digits_p++;
+		}
+		maxabs = (v < 0) ? (size_t)(-v) : (size_t)v;
+		if ( (size_t)N > maxabs ) maxabs = (size_t)N;
+		digits_exp = 1;
+		while ( maxabs >= 10 ) {
+			maxabs /= 10;
+			digits_exp++;
+		}
+		if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
+		AO.padicsize = (LONG)((size_t)ncoeffs*(2*digits_p + digits_exp + 5) + 3);
+		AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
+		AO.padicncoeffs = ncoeffs;
+	}
+
+	out = (char *)AO.padicspace;
+	out[0] = '(';
+	series = padic_get_str(out+1,in,ctx);
+	if ( series == 0 ) return(0);
+	n = strlen(series);
+
+	out[1+n] = ')';
+	out[2+n] = 0;
+	return((int)(n+2));
+}
+/*
+		#] PrintPadicSeries :
  		#[ PrintPadic :
 
-	Formats a padic_ coefficient for printing.
+	Formats a padic_ function for printing.
 
 	Two output formats are supported:
 	- series format (default): FLINT's p-adic series text,
@@ -906,72 +976,47 @@ static int PrintPadicList(PADIC_AUX *aux, padic_t in)
 	The resulting C string is stored in AO.padicspace and the return value is
 	the string length. FORM's print backend reads AO.padicspace after this call.
 	Series mode keeps surrounding parentheses; list mode prints plain padic[...].
+
+	Return value:
+	- a positive int: the number of characters written to AO.padicspace,
+	- 0:              no printable p-adic string was produced, e.g. because
+	                  p-adics are inactive, the input is invalid, FLINT failed
+	                  to format the value, or AO.padicspace could not grow.
 */
 int PrintPadic(WORD *fun,int numdigits)
 {
 	GETIDENTITY
-	PADIC_AUX *aux;
-	char *flint_string;
-	size_t n;
 	int digits = (int)PadicPrecision;
 	int mode = AO.PadicFormat;
 
 	if ( !PadicActive ) return(0);
-	aux = PadicAux;
-	if ( UnpackPadic(aux->p1,fun) ) return(0);
+	if ( UnpackPadic(paux1,fun) ) return(0);
 
 	if ( numdigits > 0 && numdigits < digits ) digits = numdigits;
 
 	if ( digits == (int)PadicPrecision ) {
-		if ( mode == PADICPRINTLIST ) return(PrintPadicList(aux,aux->p1));
-		flint_string = padic_get_str(0,aux->p1,PadicContext);
+		if ( mode == PADICPRINTLIST ) return(PrintPadicList(PadicAux,paux1));
+		return(PrintPadicSeries(paux1,PadicContext));
 	}
 	else {
 		padic_ctx_t short_ctx;
 		padic_t short_x;
+		int outlen;
 		padic_ctx_init(short_ctx,PadicContext->p,0,(slong)digits,PADIC_SERIES);
 		padic_init2(short_x,digits);
-		padic_get_fmpq(aux->q1,aux->p1,PadicContext);
-		padic_set_fmpq(short_x,aux->q1,short_ctx);
+		padic_get_fmpq(pauxq1,paux1,PadicContext);
+		padic_set_fmpq(short_x,pauxq1,short_ctx);
 		if ( mode == PADICPRINTLIST ) {
-			int outlen = PrintPadicList(aux,short_x);
+			outlen = PrintPadicList(PadicAux,short_x);
 			padic_clear(short_x);
 			padic_ctx_clear(short_ctx);
 			return(outlen);
 		}
-		flint_string = padic_get_str(0,short_x,short_ctx);
+		outlen = PrintPadicSeries(short_x,short_ctx);
 		padic_clear(short_x);
 		padic_ctx_clear(short_ctx);
+		return(outlen);
 	}
-	if ( flint_string == 0 ) return(0);
-
-	n = strlen(flint_string);
-	/* When truncating digits, append a Big-O tail unless FLINT already did. */
-	if ( digits < (int)PadicPrecision && strstr(flint_string,"O(") == 0 ) {
-		char tail[64];
-		size_t tail_len;
-		size_t new_len;
-		snprintf(tail,sizeof(tail)," + O(%ld^%d)",(long)PadicPrime,digits);
-		tail_len = strlen(tail);
-		new_len = n + tail_len + 2;
-		if ( EnsurePadicPrintBuffer(new_len) ) { flint_free(flint_string); return(0); }
-		((char *)AO.padicspace)[0] = '(';
-		memcpy((char *)AO.padicspace + 1, flint_string, n);
-		memcpy((char *)AO.padicspace + 1 + n, tail, tail_len);
-		((char *)AO.padicspace)[1 + n + tail_len] = ')';
-		((char *)AO.padicspace)[new_len] = 0;
-		flint_free(flint_string);
-		return((int)new_len);
-	}
-
-	n += 2;
-	if ( EnsurePadicPrintBuffer(n) ) { flint_free(flint_string); return(0); }
-	((char *)AO.padicspace)[0] = '(';
-	memcpy((char *)AO.padicspace + 1, flint_string, n - 2);
-	((char *)AO.padicspace)[n - 1] = ')';
-	((char *)AO.padicspace)[n] = 0;
-	flint_free(flint_string);
-	return((int)n);
 }
 /*
  		#] PrintPadic :
