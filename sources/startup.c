@@ -1355,6 +1355,7 @@ void StartVariables(void)
 	AC.activePadic = 0;
 	AC.activePadicContext = 0;
 	AO.PadicFormat = PADICPRINTSERIES;
+	AO.padicncoeffs = 0;
 #endif
 	AC.CommuteInSet = 0;
 

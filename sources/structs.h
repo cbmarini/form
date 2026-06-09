@@ -2395,6 +2395,7 @@ struct O_const {
 #ifdef WITHPADIC
     UBYTE   *padicspace;
     LONG    padicsize;
+    LONG    padicncoeffs;
 #endif
 /*----Leave NumInBrack as first non-pointer. This is used by the checkpoints--*/
     LONG    NumInBrack;            /* (O) For typing [] option in print */
