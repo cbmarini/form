@@ -1080,11 +1080,9 @@ int ToPadic(PHEAD WORD *term, WORD level)
 int PadicToRat(PHEAD WORD *term, WORD level)
 {
 	GETBIDENTITY
-	PADIC_AUX *aux;
 	WORD *tstop, *t, *stop, nsize, nsign, ncoef;
 
 	if ( !PadicActive ) return(1);
-	aux = PadicAux;
 
 	tstop = term + *term;
 	nsize = ABS(tstop[-1]);
@@ -1092,7 +1090,7 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 	tstop -= nsize;
 	t = term + 1;
 	/*
-		The term must end in a single proper padic_ record, followed by a unit
+		The term must end in a single proper padic_ function, followed by a unit
 		coefficient 1/1 (the sign is carried separately in tstop[-1]).
 	*/
 	while ( t < tstop ) {
@@ -1101,16 +1099,16 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 		t += t[1];
 	}
 	if ( t < tstop ) {
-		if ( UnpackPadic(aux->p1,t) ) return(1);
-		if ( padic_is_zero(aux->p1) ) return(0);
-		if ( PadicReconstructToFmpq(aux->q1,aux->p1) ) {
+		if ( UnpackPadic(paux1,t) ) return(1);
+		if ( padic_is_zero(paux1) ) return(0);
+		if ( PadicReconstructToFmpq(pauxq1,paux1) ) {
 			/*
 				No unique small reconstruction exists for the current precision.
 				Fall back to FLINT's canonical lift.
 			*/
-			padic_get_fmpq(aux->q1,aux->p1,PadicContext);
+			padic_get_fmpq(pauxq1,paux1,PadicContext);
 		}
-		if ( FmpqToFormRat(0,&ncoef,aux->q1) ) goto RatFailure;
+		if ( FmpqToFormRat(0,&ncoef,pauxq1) ) goto RatFailure;
 		stop = (WORD *)(((UBYTE *)term) + AM.MaxTer);
 		if ( t + ABS(ncoef) > stop ) {
 			MLOCK(ErrorMessageLock);
@@ -1120,7 +1118,7 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 			Terminate(-1);
 			return(1);
 		}
-		if ( FmpqToFormRat((UWORD *)t,&ncoef,aux->q1) ) goto RatFailure;
+		if ( FmpqToFormRat((UWORD *)t,&ncoef,pauxq1) ) goto RatFailure;
 		if ( t[0] == 0 && t[1] == 1 && ncoef == 3 ) return(0);
 		t += ABS(ncoef);
 		t[-1] = ncoef*nsign;
