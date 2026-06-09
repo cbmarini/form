@@ -5,7 +5,7 @@
  *  - a dedicated internal function `padic_` used as coefficient carrier,
  *  - statement support (`ToPadic`) in compiler/executor,
  *  - normalization/sorting helper routines for coefficient arithmetic,
- *  - print support with `Format padicprecision` and `Format padicformat`.
+ *  - print support with `Format padicprecision`.
  *
  *  The numerical backend is FLINT's padic module.
  */
@@ -84,8 +84,6 @@ typedef struct PADIC_AUX_ {
 	padic_t p4;
 	/* Scratch rational used by FORM <-> padic/fmpq conversions. */
 	fmpq_t q1;
-	/* Scratch integer used by list-format printing. */
-	mpz_t z2;
 } PADIC_AUX;
 
 /*
@@ -98,7 +96,6 @@ typedef struct PADIC_AUX_ {
 #define paux3 (PadicAux->p3)
 #define paux4 (PadicAux->p4)
 #define pauxq1 (PadicAux->q1)
-#define pauxz2 (PadicAux->z2)
 
 /*
  	#] Includes : 
@@ -112,7 +109,6 @@ static void InitPadicAux(PADIC_AUX *aux, LONG prec)
 	padic_init2(aux->p3, (slong)prec);
 	padic_init2(aux->p4, (slong)prec);
 	fmpq_init(aux->q1);
-	mpz_init(aux->z2);
 }
 /*
  		#] InitPadicAux :
@@ -125,7 +121,6 @@ static void ClearSinglePadicAux(PADIC_AUX *aux)
 	padic_clear(aux->p3);
 	padic_clear(aux->p4);
 	fmpq_clear(aux->q1);
-	mpz_clear(aux->z2);
 }
 /*
  		#] ClearSinglePadicAux :
@@ -807,111 +802,6 @@ ClearAndReturn:
 		#] PadicReconstructToFmpq :
   	#] Rekenen :
   	#[ Printing :
- 		#[ CountULongDigits :
-*/
-static size_t CountULongDigits(unsigned long x)
-{
-	size_t n = 1;
-	while ( x >= 10 ) {
-		x /= 10;
-		n++;
-	}
-	return(n);
-}
-/*
- 		#] CountULongDigits :
- 		#[ PrintPadicList :
-*/
-static int PrintPadicList(PADIC_AUX *aux, padic_t in)
-{
-	char prefix[96];
-	char *out;
-	slong v, prec, i, coeff_count;
-	size_t n, prefix_len, total_len;
-	mpz_t work, rem, pz;
-
-	v = padic_val(in);
-	prec = padic_prec(in);
-	coeff_count = prec - v;
-
-	/*
-		The textual list is a plain coefficient list without Big-O tail.
-		When the truncated value is effectively zero, print a canonical zero.
-	*/
-	if ( fmpz_is_zero(padic_unit(in)) || coeff_count <= 0 ) {
-		n = (size_t)snprintf(prefix,sizeof(prefix),"padic[%ld,0,%ld,{0}]",
-			(long)PadicPrime,(long)PadicPrecision);
-		if ( n >= sizeof(prefix) ) return(0);
-		if ( AO.padicspace == 0 || AO.padicsize <= (LONG)n ) {
-			if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
-			AO.padicsize = (LONG)n + 1;
-			AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
-		}
-		if ( AO.padicspace == 0 ) return(0);
-		memcpy((char *)AO.padicspace,prefix,n+1);
-		return((int)n);
-	}
-
-	fmpz_get_mpz(aux->z2,padic_unit(in));
-	mpz_init_set(work,aux->z2);
-	mpz_init(rem);
-	mpz_init_set_ui(pz,(unsigned long)PadicPrime);
-
-	prefix_len = (size_t)snprintf(prefix,sizeof(prefix),"padic[%ld,%ld,%ld,{",
-		(long)PadicPrime,(long)v,(long)PadicPrecision);
-	if ( prefix_len >= sizeof(prefix) ) {
-		mpz_clear(pz);
-		mpz_clear(rem);
-		mpz_clear(work);
-		return(0);
-	}
-
-	total_len = prefix_len + 2; /* "}]" */
-	for ( i = 0; i < coeff_count; i++ ) {
-		unsigned long coeff;
-		mpz_fdiv_qr(work,rem,work,pz);
-		coeff = mpz_get_ui(rem);
-		total_len += CountULongDigits(coeff);
-		if ( i + 1 < coeff_count ) total_len++;
-	}
-
-	if ( AO.padicspace == 0 || AO.padicsize <= (LONG)total_len ) {
-		if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
-		AO.padicsize = (LONG)total_len + 1;
-		AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
-	}
-	if ( AO.padicspace == 0 ) {
-		mpz_clear(pz);
-		mpz_clear(rem);
-		mpz_clear(work);
-		return(0);
-	}
-
-	out = (char *)AO.padicspace;
-	memcpy(out,prefix,prefix_len);
-	n = prefix_len;
-
-	mpz_set(work,aux->z2);
-	for ( i = 0; i < coeff_count; i++ ) {
-		unsigned long coeff;
-		size_t wrote;
-		mpz_fdiv_qr(work,rem,work,pz);
-		coeff = mpz_get_ui(rem);
-		wrote = (size_t)snprintf(out + n,(size_t)(AO.padicsize - (LONG)n),"%lu",coeff);
-		n += wrote;
-		if ( i + 1 < coeff_count ) out[n++] = ',';
-	}
-	out[n++] = '}';
-	out[n++] = ']';
-	out[n] = 0;
-
-	mpz_clear(pz);
-	mpz_clear(rem);
-	mpz_clear(work);
-	return((int)n);
-}
-/*
- 		#] PrintPadicList :
 		#[ PrintPadicSeries :
 */
 static int PrintPadicSeries(padic_t in, padic_ctx_t ctx)
@@ -965,17 +855,11 @@ static int PrintPadicSeries(padic_t in, padic_ctx_t ctx)
 
 	Formats a padic_ function for printing.
 
-	Two output formats are supported:
-	- series format (default): FLINT's p-adic series text,
-	- list format:            padic[p,v,N,{q1,q2,...}] where:
-	  * p is the active prime,
-	  * v is the valuation of the printed value,
-	  * N is the active context precision,
-	  * q_i are the series coefficients in ascending powers of p.
+	Prints FLINT's p-adic series text.
 
 	The resulting C string is stored in AO.padicspace and the return value is
 	the string length. FORM's print backend reads AO.padicspace after this call.
-	Series mode keeps surrounding parentheses; list mode prints plain padic[...].
+	Series output keeps surrounding parentheses.
 
 	Return value:
 	- a positive int: the number of characters written to AO.padicspace,
@@ -987,7 +871,6 @@ int PrintPadic(WORD *fun,int numdigits)
 {
 	GETIDENTITY
 	int digits = (int)PadicPrecision;
-	int mode = AO.PadicFormat;
 
 	if ( !PadicActive ) return(0);
 	if ( UnpackPadic(paux1,fun) ) return(0);
@@ -995,7 +878,6 @@ int PrintPadic(WORD *fun,int numdigits)
 	if ( numdigits > 0 && numdigits < digits ) digits = numdigits;
 
 	if ( digits == (int)PadicPrecision ) {
-		if ( mode == PADICPRINTLIST ) return(PrintPadicList(PadicAux,paux1));
 		return(PrintPadicSeries(paux1,PadicContext));
 	}
 	else {
@@ -1006,12 +888,6 @@ int PrintPadic(WORD *fun,int numdigits)
 		padic_init2(short_x,digits);
 		padic_get_fmpq(pauxq1,paux1,PadicContext);
 		padic_set_fmpq(short_x,pauxq1,short_ctx);
-		if ( mode == PADICPRINTLIST ) {
-			outlen = PrintPadicList(PadicAux,short_x);
-			padic_clear(short_x);
-			padic_ctx_clear(short_ctx);
-			return(outlen);
-		}
 		outlen = PrintPadicSeries(short_x,short_ctx);
 		padic_clear(short_x);
 		padic_ctx_clear(short_ctx);
@@ -1067,6 +943,36 @@ int CoPadicToRat(UBYTE *s)
 }
 /*
  		#] CoPadicToRat :
+		#[ CoFromPadic :
+
+	Compiler front-end for the `FromPadic, f;` statement.
+	The target must be a declared regular function.
+*/
+int CoFromPadic(UBYTE *s)
+{
+	WORD numfun;
+	int type;
+	UBYTE *t, c;
+
+	while ( *s == ' ' || *s == ',' || *s == '\t' ) s++;
+	t = SkipAName(s);
+	if ( t == 0 ) goto syntaxerror;
+	c = *t; *t = 0;
+	type = GetName(AC.varnames,s,&numfun,NOAUTO);
+	*t = c;
+	if ( type != CFUNCTION || functions[numfun].spec != 0
+	  || numfun + FUNCTION == PADICFUN ) goto syntaxerror;
+	while ( *t == ' ' || *t == ',' || *t == '\t' ) t++;
+	if ( *t ) goto syntaxerror;
+	Add3Com(TYPEFROMPADIC,numfun+FUNCTION);
+	return(0);
+
+syntaxerror:
+	MesPrint("&FromPadic statement needs one declared regular function for its argument");
+	return(1);
+}
+/*
+		#] CoFromPadic :
  		#[ ToPadic :
 
 	Runtime implementation of `ToPadic;`.
@@ -1180,6 +1086,28 @@ RatFailure:
 }
 /*
  		#] PadicToRat :
+		#[ FromPadic :
+
+	Runtime implementation of `FromPadic, f;`.
+	Each syntactically valid padic_(v,N,u) at the current execution level is
+	rewritten in place to f(v,N,u).
+*/
+int FromPadic(PHEAD WORD *term, WORD level, WORD target)
+{
+	GETBIDENTITY
+	WORD *t, *tstop;
+
+	tstop = term + *term;
+	tstop -= ABS(tstop[-1]);
+	t = term + 1;
+	while ( t < tstop ) {
+		if ( *t == PADICFUN && TestPadic(t) ) *t = target;
+		t += t[1];
+	}
+	return(Generator(BHEAD term,level));
+}
+/*
+		#] FromPadic :
   	#] Compiler/runtime statements :
   	#[ Sorting :
  		#[ AddWithPadic :

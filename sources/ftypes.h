@@ -294,11 +294,6 @@ typedef int (*TFUN1)(UBYTE *,int);
 #define NOQUADMASK 63
 #define NORMALFORMAT 0
 #define NOSPACEFORMAT 1
-#ifdef WITHPADIC
-#define PADICPRINTSERIES 0
-#define PADICPRINTLIST 1
-#endif
-
 #define ISNOTFORTRAN90 0
 #define ISFORTRAN90 1
 
@@ -605,6 +600,7 @@ typedef int (*TFUN1)(UBYTE *,int);
 #ifdef WITHPADIC
 #define TYPETOPADIC 93
 #define TYPEPADICTORAT 94
+#define TYPEFROMPADIC 95
 #endif
 
 /*

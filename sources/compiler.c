@@ -162,6 +162,9 @@ static KEYWORD com2commands[] = {
 	,{"factorize",      (TFUN)CoFactorize,        TOOUTPUT,     PARTEST}
 	,{"fill",           (TFUN)CoFill,             DECLARATION,  PARTEST}
 	,{"fillexpression", (TFUN)CoFillExpression,   DECLARATION,  PARTEST}
+#ifdef WITHPADIC
+	,{"frompadic",      (TFUN)CoFromPadic,        STATEMENT,    PARTEST}
+#endif
 	,{"frompolynomial", (TFUN)CoFromPolynomial,   STATEMENT,    PARTEST}
 	,{"funpowers",      (TFUN)CoFunPowers,        DECLARATION,  PARTEST}
 	,{"hide",           (TFUN)CoHide,             SPECIFICATION,PARTEST}
