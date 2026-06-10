@@ -698,110 +698,165 @@ int InvPadic(PHEAD WORD *outfun, WORD *fun)
 }
 /*
 		#] InvPadic :
-		#[ FmpqToFormRat :
+		#[ PadicReconstruct :
 
-	Converts a FLINT rational to FORM's internal rational coefficient encoding.
+	Reconstructs a FORM rational coefficient from a p-adic coefficient.
 
-	If out is 0, this routine only computes the signed size code in *nratout.
-	Returns -1 when the result does not fit in FORM's encoding bounds.
+	This mirrors the FORM-level recipe
+
+	    FromPadic, padic;
+	    id padic(v?,N?,u?) = makerational_(u,`$prime'^(N-v))*$prime^v;
+
+	but calls the same low-level reconstruction routines used by makerational_
+	directly. The output is a full FORM coefficient, including the final signed
+	length word. A return value of -1 is non-fatal: no unique reconstruction was
+	found or an intermediate value does not fit local number storage, so
+	PadicToRat should leave the original padic_ untouched.
 */
-static int FmpqToFormRat(UWORD *out, WORD *nratout, fmpq_t q)
+static int PadicReconstruct(PHEAD UWORD *out, WORD *nratout, WORD *fun)
 {
-	int sign;
-	size_t nnum, nden, n, i;
-	fmpz_t z;
+	fmpz_t modulus, ppower;
+	UWORD *u, *mod, *formpower;
+	WORD *arg;
+	WORD nu, nmod, npower, nred, i;
+	ULONG x;
+	slong v, N, modexp;
+	int retval = -1;
 
-	sign = fmpq_sgn(q);
-	if ( sign == 0 ) {
-		*nratout = 3;
-		if ( out != 0 ) {
-			out[0] = 0;
-			out[1] = 1;
-			out[2] = 3;
-		}
+	if ( TestPadic(fun) == 0 ) return(-1);
+
+	// Read the argument triplet in order: v, N, u.
+	arg = fun + FUNHEAD;
+	if ( *arg == -SNUMBER ) {
+		v = (slong)arg[1];
+		arg += 2;
+	}
+	else {
+		x = ((ULONG)(UWORD)arg[ARGHEAD+2] << BITSINWORD) + (UWORD)arg[ARGHEAD+1];
+		v = (arg[ARGHEAD+5] < 0) ? -(slong)x : (slong)x;
+		arg += *arg;
+	}
+	if ( *arg == -SNUMBER ) {
+		N = (slong)arg[1];
+		arg += 2;
+	}
+	else {
+		x = ((ULONG)(UWORD)arg[ARGHEAD+2] << BITSINWORD) + (UWORD)arg[ARGHEAD+1];
+		N = (arg[ARGHEAD+5] < 0) ? -(slong)x : (slong)x;
+		arg += *arg;
+	}
+
+	if ( *arg == -SNUMBER && arg[1] == 0 ) {
+		out[0] = 0;
+		out[1] = 1;
+		*nratout = INCLENG(1);
+		out[2] = (UWORD)ABS(*nratout);
 		return(0);
 	}
+	modexp = N - v;
+	if ( modexp <= 0 ) return(-1);
 
-	nnum = fmpz_is_zero(fmpq_numref(q)) ? 0 :
-		(size_t)((fmpz_sizeinbase(fmpq_numref(q),2) + BITSINWORD - 1) / BITSINWORD);
-	nden = fmpz_is_zero(fmpq_denref(q)) ? 0 :
-		(size_t)((fmpz_sizeinbase(fmpq_denref(q),2) + BITSINWORD - 1) / BITSINWORD);
-	if ( nden == 0 ) return(-1);
-	n = ( nnum > nden ) ? nnum : nden;
-	if ( n > (size_t)((WORD_MAX_VALUE-1)/2) ) return(-1);
-
-	*nratout = (WORD)(2*n + 1);
-	if ( sign < 0 ) *nratout = -*nratout;
-	if ( out == 0 ) return(0);
-
-	for ( i = 0; i < 2*n; i++ ) out[i] = 0;
-
-	fmpz_init(z);
-	if ( nnum > 0 ) {
-		fmpz_abs(z,fmpq_numref(q));
-		flint_fmpz_get_form(z,(WORD *)out);
-	}
-	if ( nden > 0 ) {
-		fmpz_set(z,fmpq_denref(q));
-		flint_fmpz_get_form(z,(WORD *)(out+n));
-	}
-	fmpz_clear(z);
-	out[2*n] = (UWORD)ABS(*nratout);
-	return(0);
-}
-/*
-		#] FmpqToFormRat :
-		#[ PadicReconstructToFmpq :
-
-		Reconstructs a small rational from a reduced p-adic value using FLINT's
-		rational reconstruction and applies the p-adic valuation afterwards.
-
-		This is a "best effort" conversion used by PadicToRat(): if reconstruction
-		fails (not unique for the current modulus), the caller can fall back to a
-		canonical lift via padic_get_fmpq().
- */
-static int PadicReconstructToFmpq(fmpq_t out, padic_t in)
-{
-	fmpz_t residue, modulus, ppower;
-	fmpq_t recon;
-	slong v, N, modexp;
-	int ok = 0;
-
-	fmpz_init(residue);
 	fmpz_init(modulus);
 	fmpz_init(ppower);
-	fmpq_init(recon);
+	u = NumberMalloc("PadicReconstruct");
+	mod = NumberMalloc("PadicReconstruct");
+	formpower = NumberMalloc("PadicReconstruct");
 
-	v = padic_get_val(in);
-	N = padic_get_prec(in);
-	modexp = N - v;
-	if ( modexp <= 0 ) goto ClearAndReturn;
+	if ( *arg == -SNUMBER ) {
+		nu = (arg[1] < 0) ? -1 : 1;
+		u[0] = (arg[1] < 0) ? (UWORD)(-arg[1]) : (UWORD)arg[1];
+	}
+	else {
+		nu = (WORD)((ABS(arg[*arg-1])-1)/2);
+		if ( arg[*arg-1] < 0 ) nu = -nu;
+		for ( i = 0; i < ABS(nu); i++ ) u[i] = (UWORD)arg[ARGHEAD+1+i];
+	}
 
+	/* mod = modulus = p^(N-v). */
 	fmpz_pow_ui(modulus,PadicContext->p,(ulong)modexp);
-	fmpz_mod(residue,padic_unit(in),modulus);
-	ok = fmpq_reconstruct_fmpz(recon,residue,modulus);
-	if ( !ok ) goto ClearAndReturn;
+	nmod = flint_fmpz_get_form(modulus,(WORD *)mod);
 
+	/*
+		Match makerational_: rational reconstruction works with the residue
+		class u mod p^(N-v), so reduce u in place when it lies outside the
+		modulus range. The quotient is not needed.
+	*/
+	if ( BigLong(u,ABS(nu),mod,nmod) >= 0 ) {
+		UWORD *quotient = NumberMalloc("PadicReconstruct");
+		UWORD *remainder = NumberMalloc("PadicReconstruct");
+		WORD nquot, nrem;
+
+		if ( DivLong(u,nu,mod,nmod,quotient,&nquot,remainder,&nrem) ) {
+			NumberFree(remainder,"PadicReconstruct");
+			NumberFree(quotient,"PadicReconstruct");
+			goto ClearAndReturn;
+		}
+		for ( i = 0; i < ABS(nrem); i++ ) u[i] = remainder[i];
+		nu = nrem;
+		NumberFree(quotient,"PadicReconstruct");
+		NumberFree(remainder,"PadicReconstruct");
+		if ( nu == 0 ) {
+			out[0] = 0;
+			out[1] = 1;
+			nred = 1;
+			goto StoreCoefficient;
+		}
+	}
+	if ( ABS(nu) == 1 && nmod == 1
+	 && u[0] <= (UWORD)WORD_MAX_VALUE
+	 && mod[0] <= (UWORD)WORD_MAX_VALUE ) {
+		WORD num, den;
+		WORD sign = (nu < 0) ? -1 : 1;
+
+		if ( MakeRational((WORD)u[0],(WORD)mod[0],&num,&den) ) goto ClearAndReturn;
+		if ( sign < 0 ) num = -num;
+		if ( num < 0 ) {
+			out[0] = (UWORD)(-num);
+			nred = -1;
+		}
+		else {
+			out[0] = (UWORD)num;
+			nred = 1;
+		}
+		out[1] = (UWORD)den;
+	}
+	else {
+		if ( MakeLongRational(BHEAD u,nu,mod,nmod,out,&nred) ) {
+			goto ClearAndReturn;
+		}
+	}
+
+	/*
+		The reconstruction above returns only the rational unit. Now apply the
+		p-adic valuation with FORM's rational arithmetic so the coefficient is
+		normalized in the same way as makerational_ output.
+	*/
 	if ( v > 0 ) {
 		fmpz_pow_ui(ppower,PadicContext->p,(ulong)v);
-		fmpq_mul_fmpz(recon,recon,ppower);
+		npower = flint_fmpz_get_form(ppower,(WORD *)formpower);
+		if ( Mully(BHEAD out,&nred,formpower,npower) ) goto ClearAndReturn;
 	}
 	else if ( v < 0 ) {
 		fmpz_pow_ui(ppower,PadicContext->p,(ulong)(-v));
-		fmpq_div_fmpz(recon,recon,ppower);
+		npower = flint_fmpz_get_form(ppower,(WORD *)formpower);
+		if ( Divvy(BHEAD out,&nred,formpower,npower) ) goto ClearAndReturn;
 	}
 
-	fmpq_set(out,recon);
+StoreCoefficient:
+	*nratout = INCLENG(nred);
+	out[2*ABS(nred)] = (UWORD)ABS(*nratout);
+	retval = 0;
 
 ClearAndReturn:
-	fmpq_clear(recon);
+	NumberFree(formpower,"PadicReconstruct");
+	NumberFree(mod,"PadicReconstruct");
+	NumberFree(u,"PadicReconstruct");
 	fmpz_clear(ppower);
 	fmpz_clear(modulus);
-	fmpz_clear(residue);
-	return(ok ? 0 : -1);
+	return(retval);
 }
 /*
-		#] PadicReconstructToFmpq :
+		#] PadicReconstruct :
   	#] Rekenen :
   	#[ Printing :
 		#[ PrintPadicSeries :
@@ -1012,13 +1067,15 @@ int ToPadic(PHEAD WORD *term, WORD level)
 	Runtime implementation of `PadicToRat;`.
 
 	This finds a terminal `padic_` coefficient record and converts it back to a
-	FORM rational coefficient. The conversion first tries rational reconstruction
-	(to keep results small) and otherwise falls back to a canonical lift.
+	FORM rational coefficient by rational reconstruction. If no reconstruction
+	exists at the current precision, the padic_ coefficient is left untouched.
 */
 int PadicToRat(PHEAD WORD *term, WORD level)
 {
 	GETBIDENTITY
-	WORD *tstop, *t, *stop, nsize, nsign, ncoef;
+	static int warnflag = 1;
+	WORD *tstop, *t, *stop, *from, nsize, nsign, ncoef, i;
+	UWORD *rat;
 
 	if ( !PadicActive ) return(1);
 
@@ -1037,39 +1094,41 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 		t += t[1];
 	}
 	if ( t < tstop ) {
-		if ( UnpackPadic(paux1,t) ) return(1);
-		if ( padic_is_zero(paux1) ) return(0);
-		if ( PadicReconstructToFmpq(pauxq1,paux1) ) {
-			/*
-				No unique small reconstruction exists for the current precision.
-				Fall back to FLINT's canonical lift.
-			*/
-			padic_get_fmpq(pauxq1,paux1,PadicContext);
+		rat = (UWORD *)TermMalloc("PadicToRat");
+		if ( PadicReconstruct(BHEAD rat,&ncoef,t) ) {
+			if ( warnflag ) {
+				MLOCK(ErrorMessageLock);
+				if ( warnflag ) {
+					MesPrint("%w Warning: p-adic coefficient could not be reconstructed in PadicToRat");
+					warnflag = 0;
+				}
+				MUNLOCK(ErrorMessageLock);
+			}
+			TermFree((WORD *)rat,"PadicToRat");
+			return(Generator(BHEAD term,level));
 		}
-		if ( FmpqToFormRat(0,&ncoef,pauxq1) ) goto RatFailure;
+		if ( rat[0] == 0 && rat[1] == 1 && ncoef == 3 ) {
+			TermFree((WORD *)rat,"PadicToRat");
+			return(0);
+		}
 		stop = (WORD *)(((UBYTE *)term) + AM.MaxTer);
 		if ( t + ABS(ncoef) > stop ) {
 			MLOCK(ErrorMessageLock);
 			MesPrint("Term too complex after p-adic to rational conversion. MaxTermSize = %10l",
 				AM.MaxTer/sizeof(WORD));
 			MUNLOCK(ErrorMessageLock);
+			TermFree((WORD *)rat,"PadicToRat");
 			Terminate(-1);
 			return(1);
 		}
-		if ( FmpqToFormRat((UWORD *)t,&ncoef,pauxq1) ) goto RatFailure;
-		if ( t[0] == 0 && t[1] == 1 && ncoef == 3 ) return(0);
-		t += ABS(ncoef);
+		from = (WORD *)rat;
+		i = ABS(ncoef);
+		NCOPY(t,from,i)
 		t[-1] = ncoef*nsign;
 		*term = t - term;
+		TermFree((WORD *)rat,"PadicToRat");
 	}
 	return(Generator(BHEAD term,level));
-
-RatFailure:
-	MLOCK(ErrorMessageLock);
-	MesPrint("Failed to convert p-adic coefficient to rational.");
-	MUNLOCK(ErrorMessageLock);
-	Terminate(-1);
-	return(1);
 }
 /*
  		#] PadicToRat :
