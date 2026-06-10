@@ -1774,8 +1774,7 @@ int StrictRounding(PHEAD WORD *, WORD, WORD, WORD);
 #ifdef WITHPADIC
 int DoStartPadic(UBYTE *);
 int DoEndPadic(UBYTE *);
-int PadicIsPrime(LONG);
-int StartPadicSystem(LONG, LONG);
+int StartPadicSystem(UBYTE *, LONG);
 void ClearPadicSystem(void);
 int CoToPadic(UBYTE *);
 int CoPadicToRat(UBYTE *);

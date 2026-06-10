@@ -7891,8 +7891,8 @@ int DoStartPadic(UBYTE *s)
 {
 	GETIDENTITY
 	int error = 0;
-	LONG p, N;
-	UBYTE *ss;
+	LONG N = 0;
+	UBYTE *ss, *p, *pstop, c;
 
 	if ( AP.PreSwitchModes[AP.PreSwitchLevel] != EXECUTINGPRESWITCH ) return(0);
 	if ( AP.PreIfStack[AP.PreIfLevel] != EXECUTINGIF ) return(0);
@@ -7915,37 +7915,33 @@ int DoStartPadic(UBYTE *s)
 	while ( *s == ',' || *s == ' ' || *s == '\t' ) s++;
 	ss = s;
 	// The first parameter is the prime number
-	if (FG.cTable[*s] == 1) ParseNumber(p,s)
-	else goto IllPar;
-	while ( *s == ',' || *s == ' ' || *s == '\t' ) s++;
-	// The second parameter is the p-adic precision
-	if (FG.cTable[*s] == 1) ParseNumber(N,s)
-	else goto IllPar;
-	while ( *s == ' ' || *s == '\t' ) s++;
-	if ( *s != 0 ) goto IllPar;
+	if ( FG.cTable[*s] == 1 ) {
+		p = s;
+		while ( FG.cTable[*s] == 1 ) s++;
+		pstop = s;
 
-	if ( p <= 1 ) {
-		MesPrint("@Illegal prime number in %#StartPadic: %l",p);
-		error = 1;
+		while ( *s == ',' || *s == ' ' || *s == '\t' ) s++;
+		// The second parameter is the p-adic precision
+		if (FG.cTable[*s] == 1) ParseNumber(N,s)
+		else goto IllPar;
+		while ( *s == ' ' || *s == '\t' ) s++;
+		if ( *s != 0 ) goto IllPar;
 	}
-	else if ( PadicIsPrime(p) == 0 ) {
-		MesPrint("@The first parameter in %#StartPadic should be prime: %l",p);
+	else {
+IllPar:
+		MesPrint("@Illegal parameter in %#StartPadic: %s ",ss);
 		error = 1;
-	}
-	if ( N <= 0 ) {
-		MesPrint("@The second parameter in %#StartPadic shoud be positive: %l",N);
-		error = 1;
-	}
+	};
 
 	if ( error == 0 ) {
+		/* Split the existing input buffer so FLINT can parse just the prime. */
+		c = *pstop;
+		*pstop = 0;
 		if ( StartPadicSystem(p,N) ) error = 1;
 		else AO.PadicPrec = 0;
+		*pstop = c;
 	}
 	return(error);
-
-IllPar:
-	MesPrint("@Illegal parameter in %#StartPadic: %s ",ss);
-	return(1);
 }
 
 #endif

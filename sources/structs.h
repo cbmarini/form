@@ -1782,7 +1782,6 @@ struct C_const {
     LONG    tMaxWeight;            /* (C) Maximum weight for MZV or Euler */
 #endif
 #ifdef WITHPADIC
-    LONG    activePadicPrime;      /* (C) Prime for padic_ system */
     LONG    activePadicPrecision;  /* (C) Precision for padic_ system */
     int     activePadic;           /* (C) p-adic system currently active */
     void    *activePadicContext;   /* (C) Active FLINT p-adic context */
