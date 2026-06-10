@@ -59,11 +59,10 @@
 	The context is configured by #StartPadic / #EndPadic.
 
 	Note: the internal `padic_` coefficient carrier does not store p itself.
-	The active `PadicPrime`/`PadicContext` is assumed when unpacking and
+	The active `PadicContext` is assumed when unpacking and
 	operating on p-adic coefficients.
 */
 #define PadicActive            AC.activePadic
-#define PadicPrime             AC.activePadicPrime
 #define PadicPrecision         AC.activePadicPrecision
 #define ActivePadicContext     AC.activePadicContext
 #define PadicContext           ((padic_ctx_struct *)(ActivePadicContext))
@@ -100,6 +99,31 @@ typedef struct PADIC_AUX_ {
 /*
  	#] Includes : 
   	#[ Helpers :
+ 		#[ AllocatePadicPrintBuffer :
+*/
+/*
+	Allocate a conservative print buffer for FLINT's p-adic series output.
+	FLINT owns the exact formatting; this just keeps FORM's cached output
+	buffer large enough for N coefficients with prime and exponent decorations.
+*/
+static void AllocatePadicPrintBuffer(LONG ncoeffs, const fmpz_t prime, size_t maxabs)
+{
+	size_t digits_p = fmpz_sizeinbase(prime,10);
+	size_t digits_exp = 1;
+
+	if ( digits_p == 0 ) digits_p = 1;
+	while ( maxabs >= 10 ) {
+		maxabs /= 10;
+		digits_exp++;
+	}
+
+	if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
+	AO.padicncoeffs = ncoeffs;
+	AO.padicsize = (LONG)((size_t)AO.padicncoeffs*(2*digits_p + digits_exp + 5) + 3);
+	AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
+}
+/*
+ 		#] AllocatePadicPrintBuffer :
  		#[ InitPadicAux :
 */
 static void InitPadicAux(PADIC_AUX *aux, LONG prec)
@@ -189,20 +213,6 @@ static void ClearPadicAux(void)
 }
 /*
  		#] ClearPadicAux :
- 		#[ PadicIsPrime :
-*/
-int PadicIsPrime(LONG p)
-{
-	int prime;
-	fmpz_t z;
-	if ( p <= 1 ) return(0);
-	fmpz_init_set_si(z,(slong)p);
-	prime = fmpz_is_prime(z);
-	fmpz_clear(z);
-	return(prime == 1);
-}
-/*
- 		#] PadicIsPrime :
  		#[ StartPadicSystem :
 
 	Initializes (or reinitializes) the single global p-adic context.
@@ -214,44 +224,37 @@ int PadicIsPrime(LONG p)
 	- allocates per-thread scratch objects (AT.padic_aux_ / AB[id]->T.padic_aux_),
 	- allocate buffer space for an output string.
 */
-int StartPadicSystem(LONG p, LONG N)
+int StartPadicSystem(UBYTE *p, LONG N)
 {
 	fmpz_t prime;
-	size_t digits_p, digits_exp, maxabs;
-	unsigned long pp;
-	if ( p <= 1 || N <= 0 ) return(1);
-	if ( PadicActive ) { // Clear the previous padic system
-		ClearPadicSystem();
+	int error = 0;
+	fmpz_init(prime);
+	if ( N <= 0 ) {
+		MesPrint("@The p-adic precision in %#StartPadic shoud be positive: %l",N);
+		error = 1;
 	}
-	PadicPrime = p;
-	PadicPrecision = N;
-	ActivePadicContext = Malloc1(sizeof(padic_ctx_struct),"PadicContext");
-	fmpz_init_set_si(prime,(slong)p);
-	padic_ctx_init(PadicContext,prime,0,(slong)N,PADIC_SERIES);
+	if ( fmpz_set_str(prime,(char *)p,10) || fmpz_cmp_ui(prime,1) <= 0 ) {
+		MesPrint("@Illegal prime number in %#StartPadic: %s",p);
+		error = 1;
+	}
+	else if ( fmpz_is_prime(prime) != 1 ) {
+		MesPrint("@The first parameter in %#StartPadic should be prime: %s",p);
+		error = 1;
+	}
+	if ( error == 0 ) {
+		if ( PadicActive ) { // Clear the previous padic system
+			ClearPadicSystem();
+		}
+		PadicPrecision = N;
+		ActivePadicContext = Malloc1(sizeof(padic_ctx_struct),"PadicContext");
+		padic_ctx_init(PadicContext,prime,0,(slong)N,PADIC_SERIES); // Initialize the Flint padic context
+		AllocatePadicAux(); // Allocate the auxiliary variables
+		AllocatePadicPrintBuffer(N,prime,(size_t)N); // Allocate buffer space for an output string
+
+		PadicActive = 1;
+	}
 	fmpz_clear(prime);
-	AllocatePadicAux();
-
-	// Allocate buffer space for an output string
-	if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
-	AO.padicncoeffs = N;
-
-	pp = (unsigned long)p;
-	digits_p = 1;
-	while ( pp >= 10 ) {
-		pp /= 10;
-		digits_p++;
-	}
-	maxabs = (size_t)N;
-	digits_exp = 1;
-	while ( maxabs >= 10 ) {
-		maxabs /= 10;
-		digits_exp++;
-	}
-	AO.padicsize = (LONG)((size_t)AO.padicncoeffs*(2*digits_p + digits_exp + 5) + 3);
-	AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
-
-	PadicActive = 1;
-	return(0);
+	return(error);
 }
 /*
  		#] StartPadicSystem :
@@ -273,7 +276,6 @@ void ClearPadicSystem(void)
 		ActivePadicContext = 0;
 	}
 	PadicActive = 0;
-	PadicPrime = 0;
 	PadicPrecision = 0;
 	if ( AO.padicspace ) {
 		M_free(AO.padicspace,"padicspace");
@@ -808,8 +810,7 @@ static int PrintPadicSeries(padic_t in, padic_ctx_t ctx)
 {
 	char *out, *series;
 	slong v, N;
-	size_t n, digits_p, digits_exp, maxabs;
-	unsigned long p;
+	size_t n, maxabs;
 	LONG ncoeffs;
 
 	v = padic_val(in);
@@ -820,23 +821,9 @@ static int PrintPadicSeries(padic_t in, padic_ctx_t ctx)
 
 	/* Grow the cached print buffer only if this value needs more coefficients. */
 	if ( ncoeffs > AO.padicncoeffs ) {
-		p = (unsigned long)PadicPrime;
-		digits_p = 1;
-		while ( p >= 10 ) {
-			p /= 10;
-			digits_p++;
-		}
 		maxabs = (v < 0) ? (size_t)(-v) : (size_t)v;
 		if ( (size_t)N > maxabs ) maxabs = (size_t)N;
-		digits_exp = 1;
-		while ( maxabs >= 10 ) {
-			maxabs /= 10;
-			digits_exp++;
-		}
-		if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
-		AO.padicsize = (LONG)((size_t)ncoeffs*(2*digits_p + digits_exp + 5) + 3);
-		AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
-		AO.padicncoeffs = ncoeffs;
+		AllocatePadicPrintBuffer(ncoeffs,ctx->p,maxabs);
 	}
 
 	out = (char *)AO.padicspace;

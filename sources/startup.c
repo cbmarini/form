@@ -1350,7 +1350,6 @@ void StartVariables(void)
 	AC.DefaultPrecision = AM.gDefaultPrecision = AM.ggDefaultPrecision = DEFAULTPRECISION;
 #endif
 #ifdef WITHPADIC
-	AC.activePadicPrime = 0;
 	AC.activePadicPrecision = 0;
 	AC.activePadic = 0;
 	AC.activePadicContext = 0;
