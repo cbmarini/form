@@ -5,7 +5,7 @@
  *  - a dedicated internal function `padic_` used as coefficient carrier,
  *  - statement support (`ToPadic`) in compiler/executor,
  *  - normalization/sorting helper routines for coefficient arithmetic,
- *  - print support with `Format padicprecision`.
+ *  - print support with `Format padicprint`.
  *
  *  The numerical backend is FLINT's padic module.
  */
@@ -905,32 +905,14 @@ static int PrintPadicSeries(padic_t in, padic_ctx_t ctx)
 	The resulting C string is stored in AO.padicspace and the return value
 	is the string length, or 0 if no printable p-adic string was produced.
 */
-int PrintPadic(WORD *fun,int numdigits)
+int PrintPadic(WORD *fun)
 {
 	GETIDENTITY
-	int digits = (int)PadicPrecision;
 
 	if ( !PadicActive ) return(0);
 	if ( UnpackPadic(paux1,fun) ) return(0);
 
-	if ( numdigits > 0 && numdigits < digits ) digits = numdigits;
-
-	if ( digits == (int)PadicPrecision ) {
-		return(PrintPadicSeries(paux1,PadicContext));
-	}
-	else {
-		padic_ctx_t short_ctx;
-		padic_t short_x;
-		int outlen;
-		padic_ctx_init(short_ctx,PadicContext->p,0,(slong)digits,PADIC_SERIES);
-		padic_init2(short_x,digits);
-		padic_get_fmpq(pauxq1,paux1,PadicContext);
-		padic_set_fmpq(short_x,pauxq1,short_ctx);
-		outlen = PrintPadicSeries(short_x,short_ctx);
-		padic_clear(short_x);
-		padic_ctx_clear(short_ctx);
-		return(outlen);
-	}
+	return(PrintPadicSeries(paux1,PadicContext));
 }
 /*
  		#] PrintPadic :

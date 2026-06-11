@@ -59,7 +59,7 @@ static KEYWORD formatoptions[] = {
 	,{"normal",			(TFUN)0,	NORMALFORMAT,		1}
 	,{"nospaces",		(TFUN)0,	NOSPACEFORMAT,		3}
 #ifdef WITHPADIC
-	,{"padicprecision",	(TFUN)0,	0,					6}
+	,{"padicprint",		(TFUN)0,	0,					6}
 #endif
 	,{"pfortran",		(TFUN)0,	PFORTRANMODE,		0}
 	,{"quadfortran",	(TFUN)0,	QUADRUPLEFORTRANMODE,	0}
@@ -417,13 +417,20 @@ WrongOption:		MesPrint("&Illegal option in Format FloatPrecision: %s",s);
 #ifdef WITHPADIC
 			else if ( key->flags == 6 ) {
 /*
-				Syntax: Format PadicPrecision [precision];
-				        Format PadicPrecision off;
+				Syntax: Format PadicPrint [on];
+				        Format PadicPrint off;
 */
 				while ( FG.cTable[*s] == 0 ) s++;
 				while ( *s == ' ' || *s == '\t' || *s == ',' ) s++;
 				if ( *s == 0 ) {
-					AO.PadicPrec = 0;
+					AO.PadicPrint = 1;
+				}
+				else if ( tolower(*s) == 'o' && tolower(s[1]) == 'n' ) {
+					ss = s;
+					s += 2;
+					while ( *s == ' ' || *s == '\t' || *s == ',' ) s++;
+					if ( *s ) { s = ss; goto WrongPadicOption; }
+					AO.PadicPrint = 1;
 				}
 				else if ( tolower(*s) == 'o' && tolower(s[1]) == 'f'
 				&& tolower(s[2]) == 'f' ) {
@@ -431,20 +438,11 @@ WrongOption:		MesPrint("&Illegal option in Format FloatPrecision: %s",s);
 					s += 3;
 					while ( *s == ' ' || *s == '\t' || *s == ',' ) s++;
 					if ( *s ) { s = ss; goto WrongPadicOption; }
-					AO.PadicPrec = -1;
-				}
-				else if ( FG.cTable[*s] == 1 ) {
-					ss = s;
-					ParseNumber(AO.PadicPrec,s)
-					if ( tolower(*s) == 'd' ) { s++; }
-					else if ( *s == 0 ) { }
-					else { s = ss; goto WrongPadicOption; }
-					while ( *s == ' ' || *s == '\t' || *s == ',' ) s++;
-					if ( *s ) { s = ss; goto WrongPadicOption; }
+					AO.PadicPrint = 0;
 				}
 				else {
 WrongPadicOption:
-					MesPrint("&Illegal option in Format PadicPrecision: %s",s);
+					MesPrint("&Illegal option in Format PadicPrint: %s",s);
 					error = 1;
 				}
 			}

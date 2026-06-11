@@ -213,19 +213,18 @@ If the requested precision exceeds the precision specified by
     Format floatprecision off;
 \end{verbatim}
 the floating point numbers are printed in raw internal format, see also section \ref{sec:float_raw}. 
-\item[Format padicprecision] This instruction controls p-adic printing. It can
+\item[Format padicprint] This instruction controls p-adic printing. It can
 be used as:
 \begin{verbatim}
-    Format padicprecision;
+    Format padicprint;
 \end{verbatim}
 for the full active precision $N$,
 \begin{verbatim}
-    Format padicprecision <n>;
+    Format padicprint on;
 \end{verbatim}
-for output truncated to $\min(n,N)$ digits when the active precision is
-positive, and
+for the same default p-adic series output, and
 \begin{verbatim}
-    Format padicprecision off;
+    Format padicprint off;
 \end{verbatim}
 for the raw internal \texttt{padic\_(...)} representation.
 \end{description}
