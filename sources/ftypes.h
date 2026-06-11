@@ -597,7 +597,7 @@ typedef int (*TFUN1)(UBYTE *,int);
 #define TYPESTRICTROUNDING 91
 #define TYPECHOP 92
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 #define TYPETOPADIC 93
 #define TYPEPADICTORAT 94
 #define TYPEFROMPADIC 95

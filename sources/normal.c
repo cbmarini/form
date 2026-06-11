@@ -247,7 +247,7 @@ int Normalize(PHEAD WORD *term)
 	WORD withfloat = 0;
 	WORD *firstfloat = 0;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	WORD withpadic = 0;
 	WORD *firstpadic = 0;
 	WORD *padicaccum = 0;
@@ -256,7 +256,7 @@ int Normalize(PHEAD WORD *term)
 	LONG oldcpointer = 0, x;
 	n_coef = TermMalloc("NormCoef");
 	n_llnum = TermMalloc("n_llnum");
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	padicaccum = TermMalloc("NormPadic");
 #endif
 	lnum = n_llnum+1;
@@ -281,7 +281,7 @@ Restart:
 	t = term;
 	if ( !*t ) {
 		AT.NormDepth--;
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 		TermFree(padicaccum,"NormPadic");
 #endif
 		TermFree(n_coef,"NormCoef");
@@ -2443,7 +2443,7 @@ redoshort:
 				}
 				break;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 			case PADICFUN :
 /*
 				If it is a proper padic_ we give it special treatment.
@@ -2839,7 +2839,7 @@ TryAgain:;
 						r = tt;
 					}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 					else if ( *t == PADICFUN && TestPadic(t) ) {
 						k = t[1];
 						pden[i][1] -= k;
@@ -4190,7 +4190,7 @@ NoRep:
 	}
 	else AT.FloatPos = 0;
 #endif
-	#ifdef WITHPADIC
+	#ifdef WITHFLINT
 		if ( withpadic ) {
 			WORD *padicfunction = (withpadic == 1) ? firstpadic : padicaccum;
 	/*
@@ -4271,7 +4271,7 @@ NoRep:
 		AT.NormDepth--;
 		TermFree(n_llnum,"n_llnum");
 		TermFree(n_coef,"NormCoef");
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 		TermFree(padicaccum,"NormPadic");
 #endif
 		return(1);
@@ -4302,7 +4302,7 @@ RegEnd:
 	AT.NormDepth--;
 	TermFree(n_llnum,"n_llnum");
 	TermFree(n_coef,"NormCoef");
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	TermFree(padicaccum,"NormPadic");
 #endif
 	return(regval);
@@ -4331,7 +4331,7 @@ NormZero:
 	AT.NormDepth--;
 	TermFree(n_llnum,"n_llnum");
 	TermFree(n_coef,"NormCoef");
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	TermFree(padicaccum,"NormPadic");
 #endif
 	return(regval);
@@ -4340,7 +4340,7 @@ NormMin:
 	AT.NormDepth--;
 	TermFree(n_llnum,"n_llnum");
 	TermFree(n_coef,"NormCoef");
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	TermFree(padicaccum,"NormPadic");
 #endif
 	return(-1);
@@ -4352,7 +4352,7 @@ FromNorm:
 	AT.NormDepth--;
 	TermFree(n_llnum,"n_llnum");
 	TermFree(n_coef,"NormCoef");
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	TermFree(padicaccum,"NormPadic");
 #endif
 	return(-1);

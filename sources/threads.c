@@ -4116,7 +4116,7 @@ next2:
 				TermFree(fun3,"SortBotMasterMerge");
 			}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 			else if ( AT.SortPadicMode ) {
 				WORD *termx = term1, *termy = term2;
 				if ( MergeWithPadic(BHEAD &termx,&termy) == 0 ) goto cancelled;
