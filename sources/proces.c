@@ -3985,7 +3985,7 @@ CommonEnd:
 					if ( Chop(BHEAD term,level) ) goto GenCall;
 					goto Return0;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 				  case TYPETOPADIC:
 					AT.WorkPointer = term + *term;
 					if ( ToPadic(BHEAD term,level) ) goto GenCall;

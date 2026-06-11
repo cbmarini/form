@@ -845,7 +845,7 @@ int MatchFunction(PHEAD WORD *pattern, WORD *interm, WORD *wilds)
 	// functions and tensors are handled specially. 
 	if ( *interm == FLOATFUN ) return(0);
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	// Pattern matching against padic_ functions is currently disabled.
 	if ( *interm == PADICFUN ) return(0);
 #endif

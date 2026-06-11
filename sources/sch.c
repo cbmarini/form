@@ -1933,11 +1933,11 @@ int WriteSubTerm(WORD *sterm, WORD first)
 int WriteInnerTerm(WORD *term, WORD first)
 {
 	WORD *t, *s, *s1, *s2, n, i, pow;
-#if defined(WITHFLOAT) || defined(WITHPADIC)
+#if defined(WITHFLOAT) || defined(WITHFLINT)
 #ifdef WITHFLOAT
 	int FloatChars = 0;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	int PadicChars = 0;
 #endif
 	GETIDENTITY
@@ -2018,7 +2018,7 @@ int WriteInnerTerm(WORD *term, WORD first)
 		if ( ss >= t ) first = 1;
 	}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 /*
 	Check whether there is a proper padic_ function and no raw mode.
 	If so, print as p-adic series.
@@ -2089,7 +2089,7 @@ int WriteInnerTerm(WORD *term, WORD first)
 		}
 		else 
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 		if ( *s == PADICFUN && AO.PadicPrint && AT.padic_aux_ != 0 ) {
 		}
 		else

@@ -387,7 +387,7 @@ AS_IF([test -f "$srcdir/extern/zstd/zlibWrapper/zstd_zlibwrapper.h"], [],
 # Check for flint
 AC_ARG_WITH([flint],
 	[AS_HELP_STRING([--with-flint@<:@=DIR@:>@],
-		[use flint for polynomial arithmetic (installed in prefix DIR) @<:@default=check@:>@])],
+		[use flint for polynomial arithmetic and p-adics (installed in prefix DIR) @<:@default=check@:>@])],
 	[AS_IF([test "x$withval" != xyes && test "x$withval" != xno && test "x$withval" != xcheck],
 		[with_flint=yes
 		CPPFLAGS="$CPPFLAGS -I$withval/include"
@@ -417,7 +417,7 @@ AS_IF([test "x$with_flint" != xno],
 				[MATH_LIBS="$ac_cv_search_pow"])])])
 	AS_IF([$flag], [AC_CHECK_LIB([flint], [fmpz_mpoly_init], [LIBS="-lflint $MATH_LIBS $LIBS"], [flag=false], [$MATH_LIBS])])
 	AS_IF([$flag],
-		[AC_DEFINE(WITHFLINT, [], [Define to use flint for polynomial arithmetic.])
+		[AC_DEFINE(WITHFLINT, [], [Define to use flint for polynomial arithmetic and p-adics.])
 		with_flint=yes],
 		[AS_IF([test "x$with_flint" = xyes],
 			[AC_MSG_FAILURE([test for flint failed. Give --without-flint if you want to compile without flint])])
@@ -425,7 +425,7 @@ AS_IF([test "x$with_flint" != xno],
 		with_flint=no])])
 AM_CONDITIONAL([WITHFLINT], [test "x$with_flint" = xyes])
 
-# enable-scalar/threaded/parform/debug/float/padic
+# enable-scalar/threaded/parform/debug/float
 AC_ARG_ENABLE([scalar],
 	[AS_HELP_STRING([--enable-scalar],
 		[build scalar version (form) @<:@default=yes@:>@])],
@@ -451,11 +451,6 @@ AC_ARG_ENABLE([float],
 		[build with the float feature @<:@default=yes@:>@])],
 	[AS_IF([test "x$enableval" != xno && test "x$enableval" != xcheck], [enable_float=yes])],
 	[enable_float=yes])
-AC_ARG_ENABLE([padic],
-	[AS_HELP_STRING([--enable-padic],
-		[build with the p-adic feature @<:@default=yes@:>@])],
-	[AS_IF([test "x$enableval" != xno && test "x$enableval" != xcheck], [enable_padic=yes])],
-	[enable_padic=yes])
 
 # Check for scalar version
 build_form=$enable_scalar
@@ -750,18 +745,6 @@ AS_IF([test "x$enable_float" = xyes],
 	[AS_IF([test "x$with_mpfr" = xyes],
 		[AC_MSG_WARN([mpfr is not required without the float feature.])])])
 AM_CONDITIONAL([WITHFLOAT], [test "x$enable_float" = xyes])
-
-# Check for p-adic
-AS_IF([test "x$enable_padic" != xno],
-	[AS_IF([test "x$with_flint" = xyes],
-		[enable_padic=yes],
-		[AS_IF([test "x$enable_padic" = xyes && test "x$build_any" = xyes],
-			[AC_MSG_FAILURE([test for the p-adic feature failed. It requires FLINT. Give --disable-padic if you want to build without the p-adic feature.])])
-		enable_padic=no
-		])])
-AS_IF([test "x$enable_padic" = xyes],
-	[AC_DEFINE(WITHPADIC, [], [Define to enable the p-adic feature.])])
-AM_CONDITIONAL([WITHPADIC], [test "x$enable_padic" = xyes])
 
 # Check for wall-clock time
 ok=no

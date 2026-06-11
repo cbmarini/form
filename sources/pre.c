@@ -76,7 +76,7 @@ static KEYWORD precommands[] = {
 	,{"endif"        , DoEndif        , 0, 0}
 	,{"endinside"    , DoEndInside    , 0, 0}
 	,{"endnamespace" , DoEndNamespace , 0, 0}
-#ifdef WITHPADIC
+#ifdef WITHFLINT
     ,{"endpadic"     , DoEndPadic     , 0, 0}
 #endif
 	,{"endprocedure" , DoEndprocedure , 0, 0}
@@ -117,7 +117,7 @@ static KEYWORD precommands[] = {
 #ifdef WITHFLOAT
     ,{"startfloat"   , DoStartFloat   , 0, 0}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
     ,{"startpadic"   , DoStartPadic   , 0, 0}
 #endif
 	,{"switch"       , DoPreSwitch    , 0, 0}
@@ -7775,7 +7775,7 @@ int DoStartFloat(UBYTE *s)
 		MesPrint("@Simultaneous use of floating point and modulus arithmetic makes no sense.");
 		error = 1;
 	}
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	if ( AC.activePadic ) {
 		MesPrint("@Simultaneous use of float_ and padic_ is not allowed.");
 		error = 1;
@@ -7885,7 +7885,7 @@ int DoEndFloat(UBYTE *s)
  		#] DoEndFloat : 
  		#[ DoStartPadic :
 */
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 
 int DoStartPadic(UBYTE *s)
 {
@@ -7955,7 +7955,7 @@ IllPar:
  		#] DoStartPadic :
  		#[ DoEndPadic :
 */
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 
 int DoEndPadic(UBYTE *s)
 {

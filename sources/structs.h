@@ -1781,7 +1781,7 @@ struct C_const {
     LONG    tDefaultPrecision;     /* (C) Default precision in bits for float_ */
     LONG    tMaxWeight;            /* (C) Maximum weight for MZV or Euler */
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
     LONG    activePadicPrecision;  /* (C) Precision for padic_ system */
     int     activePadic;           /* (C) p-adic system currently active */
     void    *activePadicContext;   /* (C) Active FLINT p-adic context */
@@ -2116,7 +2116,7 @@ struct T_const {
     void    *aux_;
     void    *auxr_;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
     void    *padic_aux_;
 #endif
     NORMDATA **NormData;
@@ -2192,7 +2192,7 @@ struct T_const {
     WORD    FloatPos;
     WORD    SortFloatMode;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
     WORD    PadicPos;
     WORD    SortPadicMode;
 #endif
@@ -2391,7 +2391,7 @@ struct O_const {
     UBYTE   *floatspace;
     LONG    floatsize;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
     UBYTE   *padicspace;
     LONG    padicsize;
     LONG    padicncoeffs;
@@ -2424,7 +2424,7 @@ struct O_const {
 #ifdef WITHFLOAT
     int     FloatPrec;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
     int     PadicPrint;
 #endif
     WORD    schemenum;             /* for feeding a Horner scheme to Optimize */

@@ -1750,7 +1750,7 @@ int AddCoef(PHEAD WORD **ps1, WORD **ps2)
 #ifdef WITHFLOAT
 	if ( AT.SortFloatMode ) return(AddWithFloat(BHEAD ps1,ps2));
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	if ( AT.SortPadicMode ) return(AddWithPadic(BHEAD ps1,ps2));
 #endif
 	OutCoef = AN.SoScratC;
@@ -2366,7 +2366,7 @@ WORD Compare1(PHEAD WORD *term1, WORD *term2, WORD level)
 #ifdef WITHFLOAT
 	AT.SortFloatMode = 0;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	AT.SortPadicMode = 0;
 #endif
 	prevorder = 0;
@@ -2699,7 +2699,7 @@ NoPoly:
 				else if ( TestFloat(s2-FUNHEAD) ) { return(-1); }
 			}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 			if ( level == 0 && c1 == PADICFUN && t1 == stopper1 && t2 == stopper2 && AT.padic_aux_ != 0 ) {
 /*
 				We have two PADICFUN's. Test whether they are 'legal'.
@@ -2781,7 +2781,7 @@ NoPoly:
 		AT.SortFloatMode = 2; return(0);
 	}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	if ( level == 0 && t1 < stopper1 && *t1 == PADICFUN && t1+t1[1] == stopper1
 			&& TestPadic(t1) && AT.padic_aux_ != 0 ) {
 		AT.SortPadicMode = 1; return(0);
@@ -3960,7 +3960,7 @@ OneTerm:
 						poin[S->tree[i]] = term1;
 					}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 					else if ( AT.SortPadicMode ) {
 						WORD *term1, *term2;
 						term1 = poin[S->tree[i]];

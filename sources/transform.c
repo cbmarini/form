@@ -125,7 +125,7 @@ int CoTransform(UBYTE *in)
 					if ( error == 0 ) error = 1;
 				}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 				if ( (number+FUNCTION) == PADICFUN ) {
 					MesPrint("&Illegal use of a transform statement and padic_");
 					if ( error == 0 ) error = 1;
@@ -163,7 +163,7 @@ int CoTransform(UBYTE *in)
 				}
 			}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 			{
 				WORD *r1, *r2;
 				r1 = SetElements + Sets[number].first;
@@ -785,7 +785,7 @@ hit:;
 #ifdef WITHFLOAT
 			if ( *t == FLOATFUN ) goto next;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 			if ( *t == PADICFUN ) goto next;
 #endif
 			while ( in < t ) *out++ = *in++;

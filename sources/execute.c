@@ -1240,7 +1240,7 @@ int PutBracket(PHEAD WORD *termin)
 #ifdef WITHFLOAT
 	else if ( AT.FloatPos ) tStop = termin + AT.FloatPos;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	else if ( AT.PadicPos ) tStop = termin + AT.PadicPos;
 #endif
 	else tStop = tStopa - i;

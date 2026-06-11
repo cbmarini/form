@@ -3908,7 +3908,7 @@ OneTerm:
 					poin[S->tree[i]] = term1;
 				}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 				else if ( AT.SortPadicMode ) {
 					WORD *term1, *term2;
 					term1 = poin[S->tree[i]];
@@ -4571,7 +4571,7 @@ next2:
 				TermFree(fun3,"MasterMerge");
 			}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 			else if ( AT.SortPadicMode ) {
 				WORD *termx = term1, *termy = term2;
 				if ( MergeWithPadic(BHEAD &termx,&termy) == 0 ) goto cancelled;

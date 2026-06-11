@@ -156,12 +156,6 @@ void PrintFeatureList(void)
 		"-float",
 #endif
 
-#ifdef WITHPADIC
-		"+padic",
-#else
-		"-padic",
-#endif
-
 #ifdef WITHGMP
 		"+gmp=" + std::string(gmp_version),
 #else
