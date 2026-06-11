@@ -99,27 +99,30 @@ typedef struct PADIC_AUX_ {
 /*
  	#] Includes : 
   	#[ Helpers :
- 		#[ AllocatePadicPrintBuffer :
+		#[ AllocatePadicPrintBuffer :
 */
 /*
-	Allocate a conservative print buffer for FLINT's p-adic series output.
-	FLINT owns the exact formatting; this just keeps FORM's cached output
-	buffer large enough for N coefficients with prime and exponent decorations.
+	Allocate a conservative print buffer for FLINT's p-adic series printing.
+	FLINT owns the exact formatting; this just keeps the print buffer large
+	enough: each coefficient c_n*p^n may need at most
+		2*digits_p + digits_exp + 5
+	characters as 0<= c_n < p.
+	We also need room for surrounding parentheses and the string terminator.
 */
-static void AllocatePadicPrintBuffer(LONG ncoeffs, const fmpz_t prime, size_t maxabs)
+static void AllocatePadicPrintBuffer(LONG ncoeffs, const fmpz_t prime, LONG maxexp)
 {
-	size_t digits_p = fmpz_sizeinbase(prime,10);
-	size_t digits_exp = 1;
+	size_t digits_p = fmpz_sizeinbase(prime,10), digits_exp = 1;
 
+	if ( ncoeffs < 1 ) ncoeffs = 1;
 	if ( digits_p == 0 ) digits_p = 1;
-	while ( maxabs >= 10 ) {
-		maxabs /= 10;
+	while ( maxexp >= 10 ) {
+		maxexp /= 10;
 		digits_exp++;
 	}
 
 	if ( AO.padicspace ) M_free(AO.padicspace,"padicspace");
 	AO.padicncoeffs = ncoeffs;
-	AO.padicsize = (LONG)((size_t)AO.padicncoeffs*(2*digits_p + digits_exp + 5) + 3);
+	AO.padicsize = (LONG)(ncoeffs*(2*digits_p + digits_exp + 5) + 3);
 	AO.padicspace = (UBYTE *)Malloc1((size_t)AO.padicsize,"padicspace");
 }
 /*
@@ -227,12 +230,10 @@ static void ClearPadicAux(void)
 int StartPadicSystem(UBYTE *p, LONG N)
 {
 	fmpz_t prime;
+	slong ctxmax;
+	LONG maxexp;
 	int error = 0;
 	fmpz_init(prime);
-	if ( N <= 0 ) {
-		MesPrint("@The p-adic precision in %#StartPadic shoud be positive: %l",N);
-		error = 1;
-	}
 	if ( fmpz_set_str(prime,(char *)p,10) || fmpz_cmp_ui(prime,1) <= 0 ) {
 		MesPrint("@Illegal prime number in %#StartPadic: %s",p);
 		error = 1;
@@ -246,10 +247,19 @@ int StartPadicSystem(UBYTE *p, LONG N)
 			ClearPadicSystem();
 		}
 		PadicPrecision = N;
+		/*
+			FLINT contexts cache nonnegative powers p^e, min <= e <= max and
+			require 0 <= min <= max. For N < 0 an empty cache range is sufficient
+			and FLINT computes any needed positive powers on demand.
+		*/
 		ActivePadicContext = Malloc1(sizeof(padic_ctx_struct),"PadicContext");
-		padic_ctx_init(PadicContext,prime,0,(slong)N,PADIC_SERIES); // Initialize the Flint padic context
-		AllocatePadicAux(); // Allocate the auxiliary variables
-		AllocatePadicPrintBuffer(N,prime,(size_t)N); // Allocate buffer space for an output string
+		ctxmax = (N > 0) ? (slong)N : 0;
+		padic_ctx_init(PadicContext,prime,0,ctxmax,PADIC_SERIES);
+		// Allocate the auxiliary variables
+		AllocatePadicAux();
+		// Allocate buffer space for an output string
+		maxexp = ABS(N-1);
+		AllocatePadicPrintBuffer((N > 0) ? N : 1,prime,maxexp);
 
 		PadicActive = 1;
 	}
@@ -317,8 +327,6 @@ int TestPadic(WORD *fun)
 {
 	WORD *f, *fstop;
 	WORD nargs, nnum, i;
-	LONG N;
-	ULONG x;
 
 	f = fun + FUNHEAD;
 	fstop = fun + fun[1];
@@ -341,9 +349,9 @@ int TestPadic(WORD *fun)
 		if ( f[ARGHEAD+4] != 0 ) return(0);
 		f += *f;
 	}
-	/* N: signed LONG argument; additionally require positive precision. */
+	/* N: signed LONG argument.  FLINT supports absolute precision at,
+	   above, and below O(p^0). */
 	if ( *f == -SNUMBER ) {
-		N = (LONG)f[1];
 		f += 2;
 	}
 	else {
@@ -351,12 +359,8 @@ int TestPadic(WORD *fun)
 		if ( ABS(f[ARGHEAD+5]) != 5 ) return(0);
 		if ( f[ARGHEAD+3] != 1 ) return(0);
 		if ( f[ARGHEAD+4] != 0 ) return(0);
-		x = ((ULONG)(UWORD)f[ARGHEAD+2] << BITSINWORD) + (UWORD)f[ARGHEAD+1];
-		N = (f[ARGHEAD+5] < 0) ? -(LONG)x : (LONG)x;
 		f += *f;
 	}
-	if ( N <= 0 ) return(0);
-
 	/* u: FORM integer (-SNUMBER or long integer n/1). */
 	if ( *f == -SNUMBER ) {
 		f += 2;
@@ -865,8 +869,8 @@ static int PrintPadicSeries(padic_t in, padic_ctx_t ctx)
 {
 	char *out, *series;
 	slong v, N;
-	size_t n, maxabs;
-	LONG ncoeffs;
+	size_t n;
+	LONG ncoeffs, maxexp;
 
 	v = padic_val(in);
 	N = padic_prec(in);
@@ -876,9 +880,8 @@ static int PrintPadicSeries(padic_t in, padic_ctx_t ctx)
 
 	/* Grow the cached print buffer only if this value needs more coefficients. */
 	if ( ncoeffs > AO.padicncoeffs ) {
-		maxabs = (v < 0) ? (size_t)(-v) : (size_t)v;
-		if ( (size_t)N > maxabs ) maxabs = (size_t)N;
-		AllocatePadicPrintBuffer(ncoeffs,ctx->p,maxabs);
+		maxexp = MaX(ABS((LONG)v),(LONG)N);
+		AllocatePadicPrintBuffer(ncoeffs,ctx->p,maxexp);
 	}
 
 	out = (char *)AO.padicspace;
@@ -895,19 +898,12 @@ static int PrintPadicSeries(padic_t in, padic_ctx_t ctx)
 		#] PrintPadicSeries :
  		#[ PrintPadic :
 
-	Formats a padic_ function for printing.
+	Formats a padic_ function for printing in series mode as:
+		(c_v*p^v + ... + c_{N-1}*p^(N-1))
+	with v the valuation and N the precision.
 
-	Prints FLINT's p-adic series text.
-
-	The resulting C string is stored in AO.padicspace and the return value is
-	the string length. FORM's print backend reads AO.padicspace after this call.
-	Series output keeps surrounding parentheses.
-
-	Return value:
-	- a positive int: the number of characters written to AO.padicspace,
-	- 0:              no printable p-adic string was produced, e.g. because
-	                  p-adics are inactive, the input is invalid, FLINT failed
-	                  to format the value, or AO.padicspace could not grow.
+	The resulting C string is stored in AO.padicspace and the return value
+	is the string length, or 0 if no printable p-adic string was produced.
 */
 int PrintPadic(WORD *fun,int numdigits)
 {
@@ -1049,6 +1045,7 @@ int ToPadic(PHEAD WORD *term, WORD level)
 
 	FormRatToFmpq(pauxq1,(UWORD *)tstop,ncoef);
 	padic_set_fmpq(paux1,pauxq1,PadicContext);
+	if ( padic_is_zero(paux1) ) return(0);
 	// Overwrite the old rational coefficient of the term by padic_(v,N,u) 
 	// and append rational coefficient 1/1.
 	PackPadic(tstop,paux1);

@@ -96,7 +96,9 @@ or
 \begin{verbatim}
     #StartPadic <p>,<N>
 \end{verbatim}
-Here \texttt{<p>} must be a prime and \texttt{<N>} must be a positive integer.
+Here \texttt{<p>} must be a prime and \texttt{<N>} must be an integer. Negative
+values are allowed and select an absolute precision below $O(p^0)$; zero
+selects precision $O(p^0)$.
 The active context is global and arithmetic is truncated at $O(p^N)$.
 \item[\#EndPadic] Releases all p-adic resources and disables p-adic arithmetic.
 \item[ToPadic] Converts rational coefficients into p-adic coefficients in the
@@ -220,7 +222,8 @@ for the full active precision $N$,
 \begin{verbatim}
     Format padicprecision <n>;
 \end{verbatim}
-for output truncated to $\min(n,N)$ digits, and
+for output truncated to $\min(n,N)$ digits when the active precision is
+positive, and
 \begin{verbatim}
     Format padicprecision off;
 \end{verbatim}
