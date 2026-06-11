@@ -1782,7 +1782,7 @@ int CoFromPadic(UBYTE *);
 int ToPadic(PHEAD WORD *,WORD);
 int PadicToRat(PHEAD WORD *,WORD);
 int FromPadic(PHEAD WORD *,WORD,WORD);
-int PrintPadic(WORD *fun,int numdigits);
+int PrintPadic(WORD *fun);
 int AddWithPadic(PHEAD WORD **,WORD **);
 int MergeWithPadic(PHEAD WORD **,WORD **);
 int MulPadics(PHEAD WORD *, WORD *, WORD *);

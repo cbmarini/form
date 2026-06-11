@@ -2022,14 +2022,13 @@ int WriteInnerTerm(WORD *term, WORD first)
 /*
 	Check whether there is a proper padic_ function and no raw mode.
 	If so, print as p-adic series.
-	Raw mode is indicated as AO.PadicPrec < 0.
-	AO.PadicPrec == 0 indicates that all available digits are printed.
+	Raw mode is indicated as AO.PadicPrint == 0.
 */
-	else if ( AO.PadicPrec >= 0 && AT.padic_aux_ != 0 ) {
+	else if ( AO.PadicPrint && AT.padic_aux_ != 0 ) {
 		WORD *ss = s;
 		while ( ss < t ) {
 			if ( *ss == PADICFUN ) {
-				if ( ( PadicChars = PrintPadic(ss,AO.PadicPrec) ) != 0 ) {
+				if ( ( PadicChars = PrintPadic(ss) ) != 0 ) {
 					TokenToLine(AO.padicspace);
 					first = 0;
 				}
@@ -2091,7 +2090,7 @@ int WriteInnerTerm(WORD *term, WORD first)
 		else 
 #endif
 #ifdef WITHPADIC
-		if ( *s == PADICFUN && AO.PadicPrec >= 0 && AT.padic_aux_ != 0 ) {
+		if ( *s == PADICFUN && AO.PadicPrint && AT.padic_aux_ != 0 ) {
 		}
 		else
 #endif

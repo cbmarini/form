@@ -2425,7 +2425,7 @@ struct O_const {
     int     FloatPrec;
 #endif
 #ifdef WITHPADIC
-    int     PadicPrec;
+    int     PadicPrint;
 #endif
     WORD    schemenum;             /* for feeding a Horner scheme to Optimize */
     WORD    transFlag;             /* ()  >0 indicates that translations have to be done */
