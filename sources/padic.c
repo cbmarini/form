@@ -863,40 +863,7 @@ ClearAndReturn:
 		#] PadicReconstruct :
   	#] Rekenen :
   	#[ Printing :
-		#[ PrintPadicSeries :
-*/
-static int PrintPadicSeries(padic_t in, padic_ctx_t ctx)
-{
-	char *out, *series;
-	slong v, N;
-	size_t n;
-	LONG ncoeffs, maxexp;
-
-	v = padic_val(in);
-	N = padic_prec(in);
-
-	if ( N <= v ) ncoeffs = 1;
-	else ncoeffs = (LONG)(N-v);
-
-	/* Grow the cached print buffer only if this value needs more coefficients. */
-	if ( ncoeffs > AO.padicncoeffs ) {
-		maxexp = MaX(ABS((LONG)v),(LONG)N);
-		AllocatePadicPrintBuffer(ncoeffs,ctx->p,maxexp);
-	}
-
-	out = (char *)AO.padicspace;
-	out[0] = '(';
-	series = padic_get_str(out+1,in,ctx);
-	if ( series == 0 ) return(0);
-	n = strlen(series);
-
-	out[1+n] = ')';
-	out[2+n] = 0;
-	return((int)(n+2));
-}
-/*
-		#] PrintPadicSeries :
- 		#[ PrintPadic :
+		#[ PrintPadic :
 
 	Formats a padic_ function for printing in series mode as:
 		(c_v*p^v + ... + c_{N-1}*p^(N-1))
@@ -908,11 +875,35 @@ static int PrintPadicSeries(padic_t in, padic_ctx_t ctx)
 int PrintPadic(WORD *fun)
 {
 	GETIDENTITY
+	char *out, *series;
+	slong v, N;
+	size_t n;
+	LONG ncoeffs, maxexp;
 
 	if ( !PadicActive ) return(0);
 	if ( UnpackPadic(paux1,fun) ) return(0);
 
-	return(PrintPadicSeries(paux1,PadicContext));
+	v = padic_val(paux1);
+	N = padic_prec(paux1);
+
+	if ( N <= v ) ncoeffs = 1;
+	else ncoeffs = (LONG)(N-v);
+
+	/* Grow the print buffer when it needs to accomodate more coefficients. */
+	if ( ncoeffs > AO.padicncoeffs ) {
+		maxexp = MaX(ABS((LONG)v),(LONG)N);
+		AllocatePadicPrintBuffer(ncoeffs,PadicContext->p,maxexp);
+	}
+
+	out = (char *)AO.padicspace;
+	out[0] = '(';
+	series = padic_get_str(out+1,paux1,PadicContext);
+	if ( series == 0 ) return(0);
+	n = strlen(series);
+
+	out[1+n] = ')';
+	out[2+n] = 0;
+	return((int)(n+2));
 }
 /*
  		#] PrintPadic :
