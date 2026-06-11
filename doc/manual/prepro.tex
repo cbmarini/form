@@ -2040,8 +2040,9 @@ at the end of the current module. In some cases this can significantly reduce
 \begin{verbatim}
 #startpadic <p>,<N>
 \end{verbatim}
-The parameter \texttt{<p>} must be prime and \texttt{<N>} must be a positive
-integer.
+The parameter \texttt{<p>} must be prime and \texttt{<N>} must be an integer.
+Negative values are allowed and select an absolute precision below $O(p^0)$;
+zero selects precision $O(p^0)$.
 
 \noindent See also endpadic (\ref{preendpadic}) and chapter~\ref{floatingpoint}
 on floating point and p-adic arithmetic.
@@ -2416,4 +2417,3 @@ construction that might be very useful:
 Currently the syntax does not allow this. This may change in the future.
 
 %--#] Some remarks : 
-
