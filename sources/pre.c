@@ -7961,7 +7961,7 @@ IllPar:
 		c = *pstop;
 		*pstop = 0;
 		if ( StartPadicSystem(p,N) ) error = 1;
-		else AO.PadicPrec = 0;
+		else AO.PadicPrint = 1;
 		*pstop = c;
 	}
 	return(error);
