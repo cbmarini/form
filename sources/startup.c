@@ -1349,7 +1349,7 @@ void StartVariables(void)
 	AC.MaxWeight = AM.gMaxWeight = AM.ggMaxWeight = MAXWEIGHT;
 	AC.DefaultPrecision = AM.gDefaultPrecision = AM.ggDefaultPrecision = DEFAULTPRECISION;
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	AC.activePadicPrecision = 0;
 	AC.activePadic = 0;
 	AC.activePadicContext = 0;

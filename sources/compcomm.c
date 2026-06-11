@@ -58,7 +58,7 @@ static KEYWORD formatoptions[] = {
 	,{"mathematica",	(TFUN)0,	MATHEMATICAMODE,	0}
 	,{"normal",			(TFUN)0,	NORMALFORMAT,		1}
 	,{"nospaces",		(TFUN)0,	NOSPACEFORMAT,		3}
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	,{"padicprint",		(TFUN)0,	0,					6}
 #endif
 	,{"pfortran",		(TFUN)0,	PFORTRANMODE,		0}
@@ -414,7 +414,7 @@ WrongOption:		MesPrint("&Illegal option in Format FloatPrecision: %s",s);
 				}
 			}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 			else if ( key->flags == 6 ) {
 /*
 				Syntax: Format PadicPrint [on];
@@ -2106,7 +2106,7 @@ doset:					if ( Sets[number].type != CFUNCTION ) goto nofun;
 							}
 						}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 						{
 							WORD *r1, *r2;
 							r1 = SetElements + Sets[number].first;
@@ -2128,7 +2128,7 @@ doset:					if ( Sets[number].type != CFUNCTION ) goto nofun;
 							error = 1;
 						}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 						if ( (number + FUNCTION) == PADICFUN ) {
 							MesPrint("&Illegal use of argument environment and padic_.");
 							error = 1;
@@ -3660,7 +3660,7 @@ SwitchOff:
 		Retval = 1;
 	}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	if ( AC.activePadic ) {
 		MesPrint("&Simultaneous use of p-adic and modulus arithmetic makes no sense.");
 		Retval = 1;
@@ -5465,7 +5465,7 @@ int CoPolyFun(UBYTE *s)
 		error = 1;
 	}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	if ( AC.activePadic ) {
 		MesPrint("&Simultaneous use of PolyFun and padic_ is not allowed.");
 		error = 1;
@@ -5503,7 +5503,7 @@ int CoPolyRatFun(UBYTE *s)
 		error = 1;
 	}
 #endif
-#ifdef WITHPADIC
+#ifdef WITHFLINT
 	if ( AC.activePadic ) {
 		MesPrint("&Simultaneous use of PolyFun and padic_ is not allowed.");
 		error = 1;

@@ -89,18 +89,14 @@ if WITHFLINT
 SRCBASE += \
 	flintinterface.cc \
 	flintinterface.h \
-	flintwrap.cc
+	flintwrap.cc \
+	padic.c
 endif
 
 if WITHFLOAT
 SRCBASE += \
 	evaluate.c \
 	float.c
-endif
-
-if WITHPADIC
-SRCBASE += \
-	padic.c
 endif
 
 if WITHZSTD
