@@ -7921,8 +7921,14 @@ int DoStartPadic(UBYTE *s)
 		pstop = s;
 
 		while ( *s == ',' || *s == ' ' || *s == '\t' ) s++;
-		// The second parameter is the p-adic precision
-		if (FG.cTable[*s] == 1) ParseNumber(N,s)
+		// The second parameter is the p-adic precision.
+		// It is signed: absolute precisions below O(p^0) is fine.
+		if ( *s == '+' || *s == '-' || FG.cTable[*s] == 1 ) {
+			UBYTE *digits = s;
+			while ( *digits == '+' || *digits == '-' ) digits++;
+			if ( FG.cTable[*digits] != 1 ) goto IllPar;
+			ParseSignedNumber(N,s)
+		}
 		else goto IllPar;
 		while ( *s == ' ' || *s == '\t' ) s++;
 		if ( *s != 0 ) goto IllPar;
