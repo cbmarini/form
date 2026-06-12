@@ -47,10 +47,22 @@
  * flint headers.
  */
 #include <gmp.h>
+#if defined(WINDOWS)
+// flint.h defines WORD(xx), which conflicts with the one defined in form3.h.
+// see also flintinterface.h
+#undef WORD
+#endif
+
 #include <flint/flint.h>
 #include <flint/fmpz.h>
 #include <flint/fmpq.h>
 #include <flint/padic.h>
+
+#if defined(WINDOWS)
+// Redefine WORD here to match form3.h.
+#undef WORD
+#define WORD FORM_WORD
+#endif
 
 /*
 	FORM keeps a single active p-adic context per run:
