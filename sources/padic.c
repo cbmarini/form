@@ -1169,6 +1169,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		UnpackPadic(paux1,fun1);
 		if ( size1 < 0 ) padic_neg(paux1,paux1,PadicContext);
+		fun2 = coef2;
 		FormRatToFmpq(pauxq1,(UWORD *)coef2,size2);
 		padic_set_fmpq(paux2,pauxq1,PadicContext);
 	}
@@ -1177,6 +1178,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
 		UnpackPadic(paux2,fun2);
 		if ( size2 < 0 ) padic_neg(paux2,paux2,PadicContext);
+		fun1 = coef1;
 		FormRatToFmpq(pauxq1,(UWORD *)coef1,size1);
 		padic_set_fmpq(paux1,pauxq1,PadicContext);
 	}
@@ -1286,11 +1288,13 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 		fun1 = term1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		UnpackPadic(paux1,fun1);
 		if ( size1 < 0 ) padic_neg(paux1,paux1,PadicContext);
+		fun2 = coef2;
 		FormRatToFmpq(pauxq1,(UWORD *)coef2,size2);
 		padic_set_fmpq(paux2,pauxq1,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
 		fun2 = term2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
+		fun1 = coef1;
 		FormRatToFmpq(pauxq1,(UWORD *)coef1,size1);
 		padic_set_fmpq(paux1,pauxq1,PadicContext);
 		UnpackPadic(paux2,fun2);
@@ -1312,35 +1316,35 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 
 	fun3 = TermMalloc("MergeWithPadic");
 	PackPadic(fun3,paux3);
-		if ( AT.SortPadicMode == 3 ) {
-			if ( fun1[1] + ABS(size1) == fun3[1] + 3 ) {
+	if ( AT.SortPadicMode == 3 ) {
+		if ( fun1[1] + ABS(size1) == fun3[1] + 3 ) {
 OnTopOf1:
-				/* The new (padic_ + 1/1) fits exactly on top of the old suffix. */
-				t1 = fun3; t2 = fun1;
-				for ( i = 0; i < fun3[1]; i++ ) *t2++ = *t1++;
-				*t2++ = 1; *t2++ = 1; *t2++ = 3;
-				retval = 1;
-			}
-			else if ( fun1[1] + ABS(size1) > fun3[1] + 3 ) {
+			/* The new (padic_ + 1/1) fits exactly on top of the old suffix. */
+			t1 = fun3; t2 = fun1;
+			for ( i = 0; i < fun3[1]; i++ ) *t2++ = *t1++;
+			*t2++ = 1; *t2++ = 1; *t2++ = 3;
+			retval = 1;
+		}
+		else if ( fun1[1] + ABS(size1) > fun3[1] + 3 ) {
 Shift1:
-				/* There is slack in term1; shift the tail down and rewrite in place. */
-				t2 = term1 + *term1; tt = t2;
-				*--t2 = 3; *--t2 = 1; *--t2 = 1;
-				t1 = fun3 + fun3[1];
-				for ( i = 0; i < fun3[1]; i++ ) *--t2 = *--t1;
+			/* There is slack in term1; shift the tail down and rewrite in place. */
+			t2 = term1 + *term1; tt = t2;
+			*--t2 = 3; *--t2 = 1; *--t2 = 1;
+			t1 = fun3 + fun3[1];
+			for ( i = 0; i < fun3[1]; i++ ) *--t2 = *--t1;
 			t1 = fun1;
 			while ( t1 > term1 ) *--t2 = *--t1;
 			*t2 = tt-t2; term1 = t2;
 			retval = 1;
-			}
-			else {
-				jj = fun3[1]-fun1[1]+3-ABS(size1);
+		}
+		else {
+			jj = fun3[1]-fun1[1]+3-ABS(size1);
 Over1:
-				/* term1 needs to grow: move the start pointer back by jj words. */
-				t2 = term1-jj; t1 = term1;
-				while ( t1 < fun1 ) *t2++ = *t1++;
-				term1 -= jj;
-				*term1 += jj;
+			/* term1 needs to grow: move the start pointer back by jj words. */
+			t2 = term1-jj; t1 = term1;
+			while ( t1 < fun1 ) *t2++ = *t1++;
+			term1 -= jj;
+			*term1 += jj;
 			for ( i = 0; i < fun3[1]; i++ ) *t2++ = fun3[i];
 			*t2++ = 1; *t2++ = 1; *t2++ = 3;
 			retval = 1;
