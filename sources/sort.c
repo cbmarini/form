@@ -2700,7 +2700,7 @@ NoPoly:
 			}
 #endif
 #ifdef WITHFLINT
-			if ( level == 0 && c1 == PADICFUN && t1 == stopper1 && t2 == stopper2 && AT.padic_aux_ != 0 ) {
+			if ( level == 0 && c1 == PADICFUN && t1 == stopper1 && t2 == stopper2 && AC.activePadic ) {
 /*
 				We have two PADICFUN's. Test whether they are 'legal'.
 */
@@ -2783,11 +2783,11 @@ NoPoly:
 #endif
 #ifdef WITHFLINT
 	if ( level == 0 && t1 < stopper1 && *t1 == PADICFUN && t1+t1[1] == stopper1
-			&& TestPadic(t1) && AT.padic_aux_ != 0 ) {
+			&& TestPadic(t1) && AC.activePadic ) {
 		AT.SortPadicMode = 1; return(0);
 	}
 	else if ( level == 0 && t2 < stopper2 && *t2 == PADICFUN && t2+t2[1] == stopper2
-			&& TestPadic(t2) && AT.padic_aux_ != 0 ) {
+			&& TestPadic(t2) && AC.activePadic ) {
 		AT.SortPadicMode = 2; return(0);
 	}
 #endif
