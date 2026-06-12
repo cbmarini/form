@@ -294,6 +294,7 @@ typedef int (*TFUN1)(UBYTE *,int);
 #define NOQUADMASK 63
 #define NORMALFORMAT 0
 #define NOSPACEFORMAT 1
+
 #define ISNOTFORTRAN90 0
 #define ISFORTRAN90 1
 

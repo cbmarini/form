@@ -1145,12 +1145,10 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 {
 	GETBIDENTITY
 	SORTING *S = AT.SS;
-	PADIC_AUX *aux;
 	WORD *coef1, *coef2, size1, size2, *fun1, *fun2, *fun3;
 	WORD *s1, *s2, *t1, *t2, i, j, jj;
 
 	if ( !PadicActive ) return(0);
-	aux = PadicAux;
 
 	s1 = *ps1;
 	s2 = *ps2;
@@ -1161,26 +1159,26 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		/* Both coefficients are padic_: unpack and apply external +/- sign. */
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
-		UnpackPadic(aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
-		UnpackPadic(aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
+		UnpackPadic(paux1,fun1);
+		if ( size1 < 0 ) padic_neg(paux1,paux1,PadicContext);
+		UnpackPadic(paux2,fun2);
+		if ( size2 < 0 ) padic_neg(paux2,paux2,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 1 ) {
 		/* First coefficient is padic_, second is rational. */
 		fun1 = s1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
-		UnpackPadic(aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
-		FormRatToFmpq(aux->q1,(UWORD *)coef2,size2);
-		padic_set_fmpq(aux->p2,aux->q1,PadicContext);
+		UnpackPadic(paux1,fun1);
+		if ( size1 < 0 ) padic_neg(paux1,paux1,PadicContext);
+		FormRatToFmpq(pauxq1,(UWORD *)coef2,size2);
+		padic_set_fmpq(paux2,pauxq1,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
 		/* Second coefficient is padic_, first is rational. */
 		fun2 = s2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
-		UnpackPadic(aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
-		FormRatToFmpq(aux->q1,(UWORD *)coef1,size1);
-		padic_set_fmpq(aux->p1,aux->q1,PadicContext);
+		UnpackPadic(paux2,fun2);
+		if ( size2 < 0 ) padic_neg(paux2,paux2,PadicContext);
+		FormRatToFmpq(pauxq1,(UWORD *)coef1,size1);
+		padic_set_fmpq(paux1,pauxq1,PadicContext);
 	}
 	else {
 		MLOCK(ErrorMessageLock);
@@ -1190,8 +1188,8 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		return(0);
 	}
 
-	padic_add(aux->p3,aux->p1,aux->p2,PadicContext);
-	if ( padic_is_zero(aux->p3) ) {
+	padic_add(paux3,paux1,paux2,PadicContext);
+	if ( padic_is_zero(paux3) ) {
 		/* Terms cancel. */
 		*ps1 = *ps2 = 0;
 		AT.SortPadicMode = 0;
@@ -1199,7 +1197,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 	}
 
 	fun3 = TermMalloc("AddWithPadic");
-	PackPadic(fun3,aux->p3);
+	PackPadic(fun3,paux3);
 
 	if ( AT.SortPadicMode == 3 ) {
 		/* Prefer overwriting an existing padic_ record in-place if it fits. */
@@ -1268,37 +1266,35 @@ Finished:
 int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 {
 	GETBIDENTITY
-	PADIC_AUX *aux;
 	WORD *coef1, *coef2, size1, size2, *fun1, *fun2, *fun3, *tt;
 	WORD jj, *t1, *t2, i, *term1 = *interm1, *term2 = *interm2;
 	int retval = 0;
 
 	if ( !PadicActive ) return(0);
-	aux = PadicAux;
 
 	coef1 = term1+*term1; size1 = coef1[-1]; coef1 -= ABS(size1);
 	coef2 = term2+*term2; size2 = coef2[-1]; coef2 -= ABS(size2);
 	if ( AT.SortPadicMode == 3 ) {
 		fun1 = term1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
 		fun2 = term2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
-		UnpackPadic(aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
-		UnpackPadic(aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
+		UnpackPadic(paux1,fun1);
+		if ( size1 < 0 ) padic_neg(paux1,paux1,PadicContext);
+		UnpackPadic(paux2,fun2);
+		if ( size2 < 0 ) padic_neg(paux2,paux2,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 1 ) {
 		fun1 = term1+1; while ( fun1 < coef1 && fun1[0] != PADICFUN ) fun1 += fun1[1];
-		UnpackPadic(aux->p1,fun1);
-		if ( size1 < 0 ) padic_neg(aux->p1,aux->p1,PadicContext);
-		FormRatToFmpq(aux->q1,(UWORD *)coef2,size2);
-		padic_set_fmpq(aux->p2,aux->q1,PadicContext);
+		UnpackPadic(paux1,fun1);
+		if ( size1 < 0 ) padic_neg(paux1,paux1,PadicContext);
+		FormRatToFmpq(pauxq1,(UWORD *)coef2,size2);
+		padic_set_fmpq(paux2,pauxq1,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
 		fun2 = term2+1; while ( fun2 < coef2 && fun2[0] != PADICFUN ) fun2 += fun2[1];
-		FormRatToFmpq(aux->q1,(UWORD *)coef1,size1);
-		padic_set_fmpq(aux->p1,aux->q1,PadicContext);
-		UnpackPadic(aux->p2,fun2);
-		if ( size2 < 0 ) padic_neg(aux->p2,aux->p2,PadicContext);
+		FormRatToFmpq(pauxq1,(UWORD *)coef1,size1);
+		padic_set_fmpq(paux1,pauxq1,PadicContext);
+		UnpackPadic(paux2,fun2);
+		if ( size2 < 0 ) padic_neg(paux2,paux2,PadicContext);
 	}
 	else {
 		MLOCK(ErrorMessageLock);
@@ -1308,14 +1304,14 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 		return(0);
 	}
 
-	padic_add(aux->p3,aux->p1,aux->p2,PadicContext);
-	if ( padic_is_zero(aux->p3) ) {
+	padic_add(paux3,paux1,paux2,PadicContext);
+	if ( padic_is_zero(paux3) ) {
 		AT.SortPadicMode = 0;
 		return(0);
 	}
 
 	fun3 = TermMalloc("MergeWithPadic");
-	PackPadic(fun3,aux->p3);
+	PackPadic(fun3,paux3);
 		if ( AT.SortPadicMode == 3 ) {
 			if ( fun1[1] + ABS(size1) == fun3[1] + 3 ) {
 OnTopOf1:
