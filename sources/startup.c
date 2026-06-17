@@ -2124,6 +2124,7 @@ backtrace_fallback: ;
 	This keeps valgrind happy.
 */
 #ifdef WITHFLINT
+	ClearPadicSystem();
 	flint_final_cleanup_master();
 #endif
 	CleanUp(errorcode);
