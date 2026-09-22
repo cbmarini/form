@@ -5613,3 +5613,213 @@ Print;
 assert succeeded?
 assert result("test") =~ expr("0")
 *--#] PullReq860_3 :
+*--#[ PolyRatFunExpandModulus :
+* Reduce expansion coefficients before sorting, including uncombined terms.
+Modulus 13;
+CFunction rat;
+Symbol ep;
+PolyRatFun rat(expand,ep,2);
+Local F = rat(1,1+ep/2);
+Local G = rat(1+ep,2+ep);
+Local H = rat(1+ep,2);
+Local N = rat(1,2);
+Local S = rat(ep,2);
+Local D = rat(1,2*ep);
+Local Q = rat(1,1+ep+ep^2);
+Local Z = rat(1+ep,1+ep);
+Local L = rat(ep^2,2*ep+ep^2);
+Local I = rat(1+ep/2);
+Local M = rat(1+ep,ep);
+Local R = rat(1,1+4*ep+3*ep^2);
+Local P1 = 6*rat(1,2);
+Local P2 = 6*rat(7);
+Local P3 = 1/2*rat(1,2);
+Local P4 = -6*rat(1,2);
+Local P5 = 6*rat(ep,2);
+Local P6 = 6*rat(1+ep,2);
+Local P7 = 6*rat(1,1+ep/2);
+Print +s;
+.end
+assert succeeded?
+assert result("F") =~ expr("+ rat(1 + 6*ep + 10*ep^2)")
+assert result("G") =~ expr("+ rat(7 + 10*ep + 8*ep^2)")
+assert result("H") =~ expr("+ rat(7 + 7*ep)")
+assert result("N") =~ expr("+ rat(7)")
+assert result("S") =~ expr("+ rat(7*ep)")
+assert result("D") =~ expr("+ rat(7*ep^-1)")
+assert result("Q") =~ expr("+ rat(1 + 12*ep)")
+assert result("Z") =~ expr("+ rat(1)")
+assert result("L") =~ expr("+ rat(7*ep + 3*ep^2 + 5*ep^3)")
+assert result("I") =~ expr("+ rat(1 + 7*ep)")
+assert result("M") =~ expr("+ rat(1 + ep^-1)")
+assert result("R") =~ expr("+ rat(1 + 9*ep)")
+assert result("P1") =~ expr("+ rat(3)")
+assert result("P2") =~ expr("+ rat(3)")
+assert result("P3") =~ expr("+ rat(10)")
+assert result("P4") =~ expr("+ rat(10)")
+assert result("P5") =~ expr("+ rat(3*ep)")
+assert result("P6") =~ expr("+ rat(3 + 3*ep)")
+assert result("P7") =~ expr("+ rat(6 + 10*ep + 8*ep^2)")
+*--#] PolyRatFunExpandModulus :
+*--#[ PolyRatFunExpandModulusPlusMin :
+Modulus PlusMin,13;
+CFunction rat;
+Symbol ep;
+PolyRatFun rat(expand,ep,2);
+Local F = rat(1,1+ep/2);
+Local G = rat(1+ep,2+ep);
+Local H = rat(1+ep,2);
+Local N = rat(1,2);
+Local S = rat(ep,2);
+Local D = rat(1,2*ep);
+Local Q = rat(1,1+ep+ep^2);
+Local Z = rat(1+ep,1+ep);
+Local L = rat(ep^2,2*ep+ep^2);
+Local I = rat(1+ep/2);
+Local M = rat(1+ep,ep);
+Local R = rat(1,1+4*ep+3*ep^2);
+Local P1 = 6*rat(1,2);
+Local P2 = 6*rat(7);
+Local P3 = 1/2*rat(1,2);
+Local P4 = -6*rat(1,2);
+Local P5 = 6*rat(ep,2);
+Local P6 = 6*rat(1+ep,2);
+Local P7 = 6*rat(1,1+ep/2);
+Print +s;
+.end
+assert succeeded?
+assert result("F") =~ expr("+ rat(1 + 6*ep - 3*ep^2)")
+assert result("G") =~ expr("+ rat(-6 - 3*ep - 5*ep^2)")
+assert result("H") =~ expr("+ rat(-6 - 6*ep)")
+assert result("N") =~ expr("+ rat(-6)")
+assert result("S") =~ expr("+ rat(-6*ep)")
+assert result("D") =~ expr("+ rat(-6*ep^-1)")
+assert result("Q") =~ expr("+ rat(1 - ep)")
+assert result("Z") =~ expr("+ rat(1)")
+assert result("L") =~ expr("+ rat(-6*ep + 3*ep^2 + 5*ep^3)")
+assert result("I") =~ expr("+ rat(1 - 6*ep)")
+assert result("M") =~ expr("+ rat(1 + ep^-1)")
+assert result("R") =~ expr("+ rat(1 - 4*ep)")
+assert result("P1") =~ expr("+ rat(3)")
+assert result("P2") =~ expr("+ rat(3)")
+assert result("P3") =~ expr("+ rat(-3)")
+assert result("P4") =~ expr("+ rat(-3)")
+assert result("P5") =~ expr("+ rat(3*ep)")
+assert result("P6") =~ expr("+ rat(3 + 3*ep)")
+assert result("P7") =~ expr("+ rat(6 - 3*ep - 5*ep^2)")
+*--#] PolyRatFunExpandModulusPlusMin :
+*--#[ PolyRatFunExpandRational :
+* The same expansion paths must retain ordinary rational arithmetic.
+CFunction rat;
+Symbol ep;
+PolyRatFun rat(expand,ep,2);
+Local F = rat(1,1+ep/2);
+Local G = rat(1+ep,2+ep);
+Local H = rat(1+ep,2);
+Local N = rat(1,2);
+Local S = rat(ep,2);
+Local D = rat(1,2*ep);
+Local Q = rat(1,1+ep+ep^2);
+Local Z = rat(1+ep,1+ep);
+Local L = rat(ep^2,2*ep+ep^2);
+Local I = rat(1+ep/2);
+Local M = rat(1+ep,ep);
+Local R = rat(1,1+4*ep+3*ep^2);
+Local P1 = 6*rat(1,2);
+Local P2 = 6*rat(7);
+Local P3 = 1/2*rat(1,2);
+Local P4 = -6*rat(1,2);
+Local P5 = 6*rat(ep,2);
+Local P6 = 6*rat(1+ep,2);
+Local P7 = 6*rat(1,1+ep/2);
+Print +s;
+.end
+assert succeeded?
+assert result("F") =~ expr("+ rat(1 - 1/2*ep + 1/4*ep^2)")
+assert result("G") =~ expr("+ rat(1/2 + 1/4*ep - 1/8*ep^2)")
+assert result("H") =~ expr("+ rat(1/2 + 1/2*ep)")
+assert result("N") =~ expr("+ rat(1/2)")
+assert result("S") =~ expr("+ rat(1/2*ep)")
+assert result("D") =~ expr("+ rat(1/2*ep^-1)")
+assert result("Q") =~ expr("+ rat(1 - ep)")
+assert result("Z") =~ expr("+ rat(1)")
+assert result("L") =~ expr("+ rat(1/2*ep - 1/4*ep^2 + 1/8*ep^3)")
+assert result("I") =~ expr("+ rat(1 + 1/2*ep)")
+assert result("M") =~ expr("+ rat(1 + ep^-1)")
+assert result("R") =~ expr("+ rat(1 - 4*ep + 13*ep^2)")
+assert result("P1") =~ expr("+ rat(3)")
+assert result("P2") =~ expr("+ rat(42)")
+assert result("P3") =~ expr("+ rat(1/4)")
+assert result("P4") =~ expr("+ rat(-3)")
+assert result("P5") =~ expr("+ rat(3*ep)")
+assert result("P6") =~ expr("+ rat(3 + 3*ep)")
+assert result("P7") =~ expr("+ rat(6 - 3*ep + 3/2*ep^2)")
+*--#] PolyRatFunExpandRational :
+*--#[ PolyFunModulusCoefficient :
+* Compact numeric arguments need the same reduction as general arguments.
+Modulus 13;
+CFunction pf;
+Symbol ep;
+PolyFun pf;
+Local F = 6*pf(7);
+Local G = 1/2*pf(7);
+Local H = -6*pf(7);
+Local I = 6*pf(7+ep);
+Local Z = 6*pf(0);
+Print +s;
+.end
+assert succeeded?
+assert result("F") =~ expr("+ pf(3)")
+assert result("G") =~ expr("+ pf(10)")
+assert result("H") =~ expr("+ pf(10)")
+assert result("I") =~ expr("+ pf(3 + 6*ep)")
+assert result("Z") =~ expr("0")
+*--#] PolyFunModulusCoefficient :
+*--#[ PolyFunModulusCoefficientPlusMin :
+Modulus PlusMin,13;
+CFunction pf;
+Symbol ep;
+PolyFun pf;
+Local F = 6*pf(7);
+Local G = 1/2*pf(7);
+Local H = -6*pf(7);
+Local I = 6*pf(7+ep);
+Local Z = 6*pf(0);
+Print +s;
+.end
+assert succeeded?
+assert result("F") =~ expr("+ pf(3)")
+assert result("G") =~ expr("+ pf(-3)")
+assert result("H") =~ expr("+ pf(-3)")
+assert result("I") =~ expr("+ pf(3 + 6*ep)")
+assert result("Z") =~ expr("0")
+*--#] PolyFunModulusCoefficientPlusMin :
+*--#[ PolyFunRationalCoefficient :
+CFunction pf;
+Symbol ep;
+PolyFun pf;
+Local F = 6*pf(7);
+Local G = 1/2*pf(7);
+Local H = -6*pf(7);
+Local I = 6*pf(7+ep);
+Local Z = 6*pf(0);
+Print +s;
+.end
+assert succeeded?
+assert result("F") =~ expr("+ pf(42)")
+assert result("G") =~ expr("+ pf(7/2)")
+assert result("H") =~ expr("+ pf(-42)")
+assert result("I") =~ expr("+ pf(42 + 6*ep)")
+assert result("Z") =~ expr("0")
+*--#] PolyFunRationalCoefficient :
+*--#[ PolyFunModulusCoefficientZero :
+* A nonzero product can vanish when the modulus is composite.
+Modulus 15;
+CFunction pf;
+PolyFun pf;
+Local F = 3*pf(5);
+Print;
+.end
+assert succeeded?
+assert result("F") =~ expr("0")
+*--#] PolyFunModulusCoefficientZero :
