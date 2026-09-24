@@ -168,11 +168,8 @@ static void ClearSinglePadicAux(PADIC_AUX *aux)
 static void AllocatePadicAux(void)
 {
 #ifdef WITHPTHREADS
-	int id, totnum;
-	totnum = AM.totalnumberofthreads;
-#ifdef WITHSORTBOTS
-	totnum = MaX(2 * AM.totalnumberofthreads - 3, AM.totalnumberofthreads);
-#endif
+	int id, totnum = AM.totalnumberofthreads;
+	totnum += GetNumberOfSortBots(totnum - 1);
 	for ( id = 0; id < totnum; id++ ) {
 		PADIC_AUX *aux;
 		if ( AB[id]->T.padic_aux_ ) {
@@ -206,11 +203,8 @@ static void AllocatePadicAux(void)
 static void ClearPadicAux(void)
 {
 #ifdef WITHPTHREADS
-	int id, totnum;
-	totnum = AM.totalnumberofthreads;
-#ifdef WITHSORTBOTS
-	totnum = MaX(2 * AM.totalnumberofthreads - 3, AM.totalnumberofthreads);
-#endif
+	int id, totnum = AM.totalnumberofthreads;
+	totnum += GetNumberOfSortBots(totnum - 1);
 	for ( id = 0; id < totnum; id++ ) {
 		if ( AB[id]->T.padic_aux_ ) {
 			ClearSinglePadicAux((PADIC_AUX *)(AB[id]->T.padic_aux_));
