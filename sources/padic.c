@@ -70,9 +70,9 @@
 	- precision N
 	The context is configured by #StartPadic / #EndPadic.
 
-	Note: the internal `padic_` coefficient carrier does not store p itself.
-	The active `PadicContext` is assumed when unpacking and
-	operating on p-adic coefficients.
+	The internal `padic_` coefficient carrier stores p explicitly.
+	Its prime must match the active `PadicContext` before the coefficient
+	is used in p-adic arithmetic.
 */
 #define PadicActive            AC.activePadic
 #define PadicPrecision         AC.activePadicPrecision
@@ -95,6 +95,8 @@ typedef struct PADIC_AUX_ {
 	padic_t p4;
 	/* Scratch rational used by FORM <-> padic/fmpq conversions. */
 	fmpq_t q1;
+	/* Scratch integer used to check the prime stored in padic_. */
+	fmpz_t prime;
 } PADIC_AUX;
 
 /*
@@ -107,6 +109,7 @@ typedef struct PADIC_AUX_ {
 #define paux3 (PadicAux->p3)
 #define paux4 (PadicAux->p4)
 #define pauxq1 (PadicAux->q1)
+#define pauxprime (PadicAux->prime)
 
 /*
  	#] Includes : 
@@ -148,6 +151,7 @@ static void InitPadicAux(PADIC_AUX *aux, LONG prec)
 	padic_init2(aux->p3, (slong)prec);
 	padic_init2(aux->p4, (slong)prec);
 	fmpq_init(aux->q1);
+	fmpz_init(aux->prime);
 }
 /*
  		#] InitPadicAux :
@@ -160,6 +164,7 @@ static void ClearSinglePadicAux(PADIC_AUX *aux)
 	padic_clear(aux->p3);
 	padic_clear(aux->p4);
 	fmpq_clear(aux->q1);
+	fmpz_clear(aux->prime);
 }
 /*
  		#] ClearSinglePadicAux :
@@ -308,22 +313,22 @@ void ClearPadicSystem(void)
 
 	p-adic coefficients are stored in a special function padic_ whose 
 	arguments contain the relevant p-adic information from the FLINT library:
-	    padic_(v, N, u)
+	    padic_(p, v, N, u)
 	where
+	- p is the prime,
 	- v is the p-adic valuation,
 	- N is the precision stored with this coefficient,
 	- u is the FLINT unit.
 
-	The prime p is not stored in the function. It is supplied by the active 
-	p-adic context configured through #StartPadic / #EndPadic. The unit
-	u is stored in the numerator of a normal FORM integer with denominator 1. 
-	Note: we could store p in the denominator as p cannot divide u.
+	The prime p must match the active p-adic context configured through
+	#StartPadic / #EndPadic. Both p and u are stored as FORM integers with
+	denominator 1. Recognition and FromPadic do not require an active context.
 
 		#] Explanations :
  		#[ TestPadic :
 
 	Checks whether fun has the shape of a legal padic_ with its arguments:
-	    padic_(v,N,u)
+	    padic_(p,v,N,u)
 
 	Return value:
 	- 1 if fun is a syntactically valid padic_ function,
@@ -341,9 +346,32 @@ int TestPadic(WORD *fun)
 		nargs++;
 		NEXTARG(f);
 	}
-	if ( nargs != 3 || f != fstop ) return(0);
+	if ( nargs != 4 || f != fstop ) return(0);
 
 	f = fun + FUNHEAD;
+	/* p: integer greater than 1. Matching the active prime is checked separately. */
+	if ( *f == -SNUMBER ) {
+		if ( f[1] <= 1 ) return(0);
+		f += 2;
+	}
+	else {
+		if ( *f < ARGHEAD+4 || f[*f-1] <= 0 ) return(0);
+		nnum = (WORD)((f[*f-1]-1)/2);
+		if ( nnum <= 0 ) return(0);
+		if ( *f != ARGHEAD + 2*nnum + 2 ) return(0);
+		if ( f[ARGHEAD] != 2*nnum + 2 ) return(0);
+		if ( f[ARGHEAD+nnum+1] != 1 ) return(0);
+		for ( i = 1; i < nnum; i++ ) {
+			if ( f[ARGHEAD+nnum+1+i] != 0 ) return(0);
+		}
+		if ( (UWORD)f[ARGHEAD+1] <= 1 ) {
+			for ( i = 1; i < nnum; i++ ) {
+				if ( f[ARGHEAD+1+i] != 0 ) break;
+			}
+			if ( i == nnum ) return(0);
+		}
+		f += *f;
+	}
 	/* v: signed LONG argument */
 	if ( *f == -SNUMBER ) {
 		f += 2;
@@ -387,6 +415,36 @@ int TestPadic(WORD *fun)
 }
 /*
  		#] TestPadic :
+ 		#[ CheckPadicPrime :
+
+	Checks the prime of a structurally valid padic_ against the active context.
+	A mismatch is fatal. With no active context there is nothing to compare.
+*/
+void CheckPadicPrime(WORD *fun)
+{
+	WORD *f = fun + FUNHEAD;
+	int matches;
+
+	if ( !PadicActive ) return;
+	if ( *f == -SNUMBER ) {
+		matches = fmpz_equal_si(PadicContext->p,(slong)f[1]);
+	}
+	else {
+		WORD nnum = (WORD)((f[*f-1]-1)/2);
+		GETIDENTITY
+
+		flint_fmpz_set_form(pauxprime,(UWORD *)(f+ARGHEAD+1),nnum);
+		matches = fmpz_equal(pauxprime,PadicContext->p);
+	}
+	if ( !matches ) {
+		MLOCK(ErrorMessageLock);
+		MesPrint("Prime in padic_ does not match the active p-adic prime.");
+		MUNLOCK(ErrorMessageLock);
+		Terminate(-1);
+	}
+}
+/*
+ 		#] CheckPadicPrime :
  		#[ UnpackPadic :
 
 	Converts the arguments of a padic_ function back into FLINT's padic_t.
@@ -410,11 +468,13 @@ static int UnpackPadic(padic_t out, WORD *fun)
 	}
 
 	if ( TestPadic(fun) == 0 ) return(-1);
+	CheckPadicPrime(fun);
 
 	/*
-		Read the argument triplet in order: v, N, u.
+		Skip the checked prime, then read v, N, u.
 	*/
 	f = fun + FUNHEAD;
+	NEXTARG(f);
 
 	/*
 		TestPadic() already validated the arguments of padic_, 
@@ -462,7 +522,7 @@ static int UnpackPadic(padic_t out, WORD *fun)
  		#[ PackPadic :
 
 	Converts a FLINT's padic_t into FORM's internal padic notation:
-	    padic_(v,N,u)
+	    padic_(p,v,N,u)
 
 	Return value:
 	- the number of WORDs written to fun.
@@ -485,13 +545,34 @@ static int PackPadic(WORD *fun, padic_t in)
 	N = (LONG)padic_prec(paux4);
 
 	/*
-		We now fill the function with the three arguments:
-		valuation v, precision N, and unit u.
+		We now fill the function with the four arguments:
+		prime p, valuation v, precision N, and unit u.
 	*/
 	t = fun;
 	*t++ = PADICFUN;
 	t++; // fun[1] (function length) is filled at the end.
 	FILLFUN(t);
+
+	/* Pack the active prime using the same integer encoding as the unit. */
+	if ( fmpz_fits_si(PadicContext->p)
+	  && (small = (LONG)fmpz_get_si(PadicContext->p),
+	      small <= WORD_MAX_VALUE) ) {
+		*t++ = -SNUMBER;
+		*t++ = (WORD)small;
+	}
+	else {
+		arg = t + ARGHEAD + 1;
+		nnum = flint_fmpz_get_form(PadicContext->p,arg);
+		arg += nnum;
+		*arg++ = 1;
+		for ( i = 1; i < nnum; i++ ) *arg++ = 0;
+		*arg++ = 2*nnum+1;
+		*t++ = ARGHEAD + 2*nnum + 2;
+		*t++ = 0;
+		FILLARG(t);
+		*t++ = 2*nnum + 2;
+		t = arg;
+	}
 
 	/*
 		Pack valuation v:
@@ -715,7 +796,7 @@ int InvPadic(PHEAD WORD *outfun, WORD *fun)
 	This mirrors the FORM-level recipe
 
 	    FromPadic, padic;
-	    id padic(v?,N?,u?) = makerational_(u,`$prime'^(N-v))*$prime^v;
+	    id padic(p?,v?,N?,u?) = makerational_(u,p^(N-v))*p^v;
 
 	but calls the same low-level reconstruction routines used by makerational_
 	directly. The output is a full FORM coefficient, including the final signed
@@ -734,9 +815,11 @@ static int PadicReconstruct(PHEAD UWORD *out, WORD *nratout, WORD *fun)
 	int retval = -1;
 
 	if ( TestPadic(fun) == 0 ) return(-1);
+	CheckPadicPrime(fun);
 
-	// Read the argument triplet in order: v, N, u.
+	// Skip the checked prime, then read v, N, u.
 	arg = fun + FUNHEAD;
+	NEXTARG(arg);
 	if ( *arg == -SNUMBER ) {
 		v = (slong)arg[1];
 		arg += 2;
@@ -1016,6 +1099,7 @@ int ToPadic(PHEAD WORD *term, WORD level)
 		t = term + 1;
 		while ( t < tstop ) {
 			if ( *t == PADICFUN && (t+t[1] == tstop) && TestPadic(t) ) {
+				CheckPadicPrime(t);
 				return(Generator(BHEAD term,level));
 			}
 			t += t[1]; /* advance to the next function in the term */
@@ -1025,7 +1109,7 @@ int ToPadic(PHEAD WORD *term, WORD level)
 	FormRatToFmpq(pauxq1,(UWORD *)tstop,ncoef);
 	padic_set_fmpq(paux1,pauxq1,PadicContext);
 	if ( padic_is_zero(paux1) ) return(0);
-	// Overwrite the old rational coefficient of the term by padic_(v,N,u) 
+	// Overwrite the old rational coefficient of the term by padic_(p,v,N,u)
 	// and append rational coefficient 1/1.
 	PackPadic(tstop,paux1);
 	tstop += tstop[1]; /* advance past the newly written padic_ */
@@ -1111,8 +1195,8 @@ int PadicToRat(PHEAD WORD *term, WORD level)
 		#[ FromPadic :
 
 	Runtime implementation of `FromPadic, f;`.
-	Each syntactically valid padic_(v,N,u) at the current execution level is
-	rewritten in place to f(v,N,u).
+	Each syntactically valid padic_(p,v,N,u) at the current execution level is
+	rewritten in place to f(p,v,N,u), independently of the active context.
 */
 int FromPadic(PHEAD WORD *term, WORD level, WORD target)
 {

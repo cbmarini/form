@@ -1793,6 +1793,7 @@ int DivPadics(PHEAD WORD *, WORD *, WORD *);
 int InvPadic(PHEAD WORD *, WORD *);
 int MulRatToPadic(PHEAD WORD *, WORD *, UWORD *, WORD);
 int TestPadic(WORD *);
+void CheckPadicPrime(WORD *);
 #endif
 
 /*

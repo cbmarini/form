@@ -2441,8 +2441,8 @@ Print G;
 #pend_if wordsize == 2
 assert succeeded?
 assert result("F") =~ expr("A1*A2*cos_*cos_(pi_)*cos_(3*pi_)*mzv_*mzv_(2)*mzv_(2,1)*f1*f2*q*p1.p2*x1
-      *x2*padic_(0,10,31)")
-assert result("G") =~ expr("A1*A2*cos_*cos_(pi_)*cos_(3*pi_)*mzv_*mzv_(2)*mzv_(2,1)*padic_(0,10,31)*
+      *x2*padic_(7,0,10,31)")
+assert result("G") =~ expr("A1*A2*cos_*cos_(pi_)*cos_(3*pi_)*mzv_*mzv_(2)*mzv_(2,1)*padic_(7,0,10,31)*
       f1*f2*q*p1.p2*x1*x2")
 *--#] padic_2 :
 *--#[ padic_print_invalid :
@@ -2461,7 +2461,7 @@ Local FRACTION = padic_(0,10,1/2);
 Local EXTRA = padic_(0,10,1,2);
 Local BARE = padic_;
 Local MULTIPLE = padic_(0,10)*padic_(0,10,x);
-Local MIXED = padic_(0,10)*padic_(0,10,31);
+Local MIXED = padic_(0,10)*padic_(7,0,10,31);
 Print;
 .sort
 Print +s F,NEGATIVE,SUM,PRODUCT;
@@ -2492,7 +2492,7 @@ Off Statistics;
 #StartPadic 7,10
 Symbol x1,...,x4;
 
-Local F = (x1+padic_(0,10,1)*x2+x3+padic_(0,10,1)*x4)^5;
+Local F = (x1+padic_(7,0,10,1)*x2+x3+padic_(7,0,10,1)*x4)^5;
 id x1 = 1-x2-x3-x4;
 Print;
 .end
@@ -2507,17 +2507,17 @@ On fewerstats 1;
 Format PadicPrint off;
 Symbol x1,...,x16;
 
-Local F = (x1+padic_(0,10,1)*x2+x3+padic_(0,10,1)*x4)^5;
+Local F = (x1+padic_(7,0,10,1)*x2+x3+padic_(7,0,10,1)*x4)^5;
 id x1 = 1-x2-x3-x4;
 .sort
 
-Local CORNER = x1+...+x15+padic_(0,10,1)*x16+2^80*x16;
+Local CORNER = x1+...+x15+padic_(7,0,10,1)*x16+2^80*x16;
 Print;
 .end
 #pend_if wordsize == 2
 assert succeeded?
 assert result("F") =~ expr("1")
-assert result("CORNER") =~ expr("x16*padic_(0,10,188220513) + x15 + x14 + x13 + x12 + x11 + x10 + x9 + x8
+assert result("CORNER") =~ expr("x16*padic_(7,0,10,188220513) + x15 + x14 + x13 + x12 + x11 + x10 + x9 + x8
        + x7 + x6 + x5 + x4 + x3 + x2 + x1")
 *--#] MergeWithPadic :
 *--#[ padic_reconstruct_1 :
@@ -2541,7 +2541,7 @@ assert result("F") =~ expr("101/13 + 101/218491*x^-5 + 101/31213*x^-4 + 101/4459
 #define EP "`$prime'"
 
 Off Statistics;
-Symbol eps,x1,x2,v,N;
+Symbol eps,x1,x2,p,v,N;
 CFunction padic,rat,coeff;
 Table ep();
 Fill ep = `EP';
@@ -2556,8 +2556,8 @@ ToPadic;
 #do i=0,5
     FromPadic, padic;
     id padic(?x1) = padic(?x1)+padic_(?x1);
-    Transform decode(13,3):base=`$prime';
-    id padic(v?,N?,x1?,?x2) = coeff(v,x1)-makerational_(x1,$prime)*`EP'^v;
+    Transform decode(14,4):base=`$prime';
+    id padic(p?,v?,N?,x1?,?x2) = coeff(v,x1)-makerational_(x1,$prime)*`EP'^v;
     .sort
 #enddo
 id coeff(v?,x1?) = makerational_(x1,$prime)*eps^v;
@@ -2568,6 +2568,193 @@ Print;
 assert succeeded?
 assert result("F") =~ expr("63/40 - 31/80*eps^-1 + 109/40*eps - 207/40*eps^2 + 125/8*eps^3 + 357/8*eps^4")
 *--#] padic_reconstruct_2 : 
+*--#[ padic_prime_large :
+#StartPadic 170141183460469231731687303715884105727,2
+Format 255;
+Format PadicPrint off;
+Local F = 2^80;
+ToPadic;
+Print;
+.sort
+Local SUM = F+1;
+Local PRODUCT = F*F;
+Local QUOTIENT = PRODUCT/F;
+Local ZERO = F-F;
+Print SUM,PRODUCT,QUOTIENT,ZERO;
+.sort
+Skip;
+NSkip F;
+PadicToRat;
+Print F;
+.end
+#require flint?
+#pend_if wordsize == 2
+assert succeeded?
+assert result("F", 0) =~ expr("padic_(170141183460469231731687303715884105727,0,2,1208925819614629174706176)")
+assert result("SUM") =~ expr("padic_(170141183460469231731687303715884105727,0,2,1208925819614629174706177)")
+assert result("PRODUCT") =~ expr("padic_(170141183460469231731687303715884105727,0,2,1461501637330902918203684832716283019655932542976)")
+assert result("QUOTIENT") =~ expr("padic_(170141183460469231731687303715884105727,0,2,1208925819614629174706176)")
+assert result("ZERO") =~ expr("0")
+assert result("F", 1) =~ expr("1208925819614629174706176")
+*--#] padic_prime_large :
+*--#[ padic_prime_word_boundary :
+#StartPadic 2147483659,2
+Format PadicPrint off;
+Local F = 31;
+ToPadic;
+Print;
+.sort
+Local G = F+1;
+Print G;
+.end
+#require flint?
+#pend_if wordsize == 2
+assert succeeded?
+assert result("F") =~ expr("padic_(2147483659,0,2,31)")
+assert result("G") =~ expr("padic_(2147483659,0,2,32)")
+*--#] padic_prime_word_boundary :
+*--#[ padic_prime_negative_precision :
+#StartPadic 7,-1
+Format PadicPrint off;
+Local F = 1/49;
+ToPadic;
+Print;
+.sort
+PadicToRat;
+Print;
+.end
+#require flint?
+#pend_if wordsize == 2
+assert succeeded?
+assert result("F", 0) =~ expr("padic_(7,-2,-1,1)")
+assert result("F", 1) =~ expr("1/49")
+*--#] padic_prime_negative_precision :
+*--#[ padic_prime_invalid :
+#StartPadic 7,10
+Symbols x;
+Local SYMBOLIC = padic_(x,0,10,1);
+Local FRACTION = padic_(7/2,0,10,1);
+Local ZERO = padic_(0,0,10,1);
+Local ONE = padic_(1,0,10,1);
+Local NEGATIVE = padic_(-7,0,10,1);
+Local LONGNEGATIVE = padic_(-170141183460469231731687303715884105727,0,10,1);
+Local VALUATION = padic_(7,x,10,1);
+Local PRECISION = padic_(7,0,x,1);
+Local UNIT = padic_(7,0,10,x);
+Local EXTRA = padic_(7,0,10,1,2);
+Local LEGACY = padic_(0,10,31);
+Print;
+.end
+#require flint?
+#pend_if wordsize == 2
+assert succeeded?
+assert result("SYMBOLIC") =~ expr("padic_(x,0,10,1)")
+assert result("FRACTION") =~ expr("padic_(7/2,0,10,1)")
+assert result("ZERO") =~ expr("padic_(0,0,10,1)")
+assert result("ONE") =~ expr("padic_(1,0,10,1)")
+assert result("NEGATIVE") =~ expr("padic_(-7,0,10,1)")
+assert result("LONGNEGATIVE") =~ expr("padic_(-170141183460469231731687303715884105727,0,10,1)")
+assert result("VALUATION") =~ expr("padic_(7,x,10,1)")
+assert result("PRECISION") =~ expr("padic_(7,0,x,1)")
+assert result("UNIT") =~ expr("padic_(7,0,10,x)")
+assert result("EXTRA") =~ expr("padic_(7,0,10,1,2)")
+assert result("LEGACY") =~ expr("padic_(0,10,31)")
+*--#] padic_prime_invalid :
+*--#[ padic_prime_mismatch :
+#StartPadic 7,10
+Format PadicPrint off;
+Local F = padic_(11,0,10,1);
+.end
+#require flint?
+#pend_if wordsize == 2
+assert runtime_error?("Prime in padic_ does not match the active p-adic prime.")
+assert return_value != 0
+*--#] padic_prime_mismatch :
+*--#[ padic_prime_mismatch_zero :
+#StartPadic 7,10
+Local F = padic_(11,0,10,0);
+.end
+#require flint?
+#pend_if wordsize == 2
+assert runtime_error?("Prime in padic_ does not match the active p-adic prime.")
+assert return_value != 0
+*--#] padic_prime_mismatch_zero :
+*--#[ padic_prime_mismatch_large :
+#StartPadic 170141183460469231731687303715884105727,2
+Format PadicPrint off;
+Local F = padic_(618970019642690137449562111,0,2,1);
+.end
+#require flint?
+#pend_if wordsize == 2
+assert runtime_error?("Prime in padic_ does not match the active p-adic prime.")
+assert return_value != 0
+*--#] padic_prime_mismatch_large :
+*--#[ padic_prime_switch :
+#StartPadic 7,10
+Format PadicPrint off;
+Local F = 31;
+ToPadic;
+.sort
+#EndPadic
+#StartPadic 11,10
+Format PadicPrint off;
+Local G = F;
+.end
+#require flint?
+#pend_if wordsize == 2
+assert runtime_error?("Prime in padic_ does not match the active p-adic prime.")
+assert return_value != 0
+*--#] padic_prime_switch :
+*--#[ padic_prime_from_inactive :
+CFunctions f;
+#StartPadic 7,10
+Local F = 31;
+ToPadic;
+.sort
+#EndPadic
+Local OTHER = padic_(11,0,10,1);
+Local LEGACY = padic_(0,10,31);
+FromPadic, f;
+Print;
+.end
+#require flint?
+#pend_if wordsize == 2
+assert succeeded?
+assert result("F") =~ expr("f(7,0,10,31)")
+assert result("OTHER") =~ expr("f(11,0,10,1)")
+assert result("LEGACY") =~ expr("padic_(0,10,31)")
+*--#] padic_prime_from_inactive :
+*--#[ padic_prime_restart :
+#StartPadic 170141183460469231731687303715884105727,2
+Format 255;
+Format PadicPrint off;
+Local F = 31;
+ToPadic;
+Print F;
+.sort
+Drop F;
+.sort
+#StartPadic 7,10
+Format PadicPrint off;
+Local G = 31;
+ToPadic;
+Print G;
+.sort
+Drop G;
+.sort
+#StartPadic 170141183460469231731687303715884105727,2
+Format PadicPrint off;
+Local H = 32;
+ToPadic;
+Print H;
+.end
+#require flint?
+#pend_if wordsize == 2
+assert succeeded?
+assert result("F") =~ expr("padic_(170141183460469231731687303715884105727,0,2,31)")
+assert result("G") =~ expr("padic_(7,0,10,31)")
+assert result("H") =~ expr("padic_(170141183460469231731687303715884105727,0,2,32)")
+*--#] padic_prime_restart :
 *--#[ humanstats :
 #-
 On humanstats;
