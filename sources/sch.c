@@ -1941,7 +1941,7 @@ int WriteInnerTerm(WORD *term, WORD first)
 	int FloatChars = 0;
 #endif
 #ifdef WITHFLINT
-	int PadicChars = 0;
+	WORD *PrintedPadic = 0;
 #endif
 #ifdef WITHFLOAT
 	GETIDENTITY
@@ -2030,17 +2030,18 @@ int WriteInnerTerm(WORD *term, WORD first)
 */
 	else if ( AO.PadicPrint && AC.activePadic ) {
 		WORD *ss = s;
+		first = 1;
 		while ( ss < t ) {
 			if ( *ss == PADICFUN ) {
-				if ( ( PadicChars = PrintPadic(ss) ) != 0 ) {
+				if ( PrintPadic(ss) != 0 ) {
 					TokenToLine(AO.padicspace);
+					PrintedPadic = ss;
 					first = 0;
+					break;
 				}
-				break;
 			}
 			ss += ss[1];
 		}
-		if ( ss >= t ) first = 1;
 	}
 #endif
 	else first = 1;
@@ -2094,7 +2095,7 @@ int WriteInnerTerm(WORD *term, WORD first)
 		else 
 #endif
 #ifdef WITHFLINT
-		if ( *s == PADICFUN && AO.PadicPrint && AC.activePadic ) {
+		if ( s == PrintedPadic ) {
 		}
 		else
 #endif

@@ -2445,6 +2445,47 @@ assert result("F") =~ expr("A1*A2*cos_*cos_(pi_)*cos_(3*pi_)*mzv_*mzv_(2)*mzv_(2
 assert result("G") =~ expr("A1*A2*cos_*cos_(pi_)*cos_(3*pi_)*mzv_*mzv_(2)*mzv_(2,1)*padic_(0,10,31)*
       f1*f2*q*p1.p2*x1*x2")
 *--#] padic_2 :
+*--#[ padic_print_invalid :
+#StartPadic 7,10
+Off Statistics;
+Symbols x;
+CFunctions f;
+Local F = padic_(0,10);
+Local NEGATIVE = -padic_(0,10);
+Local SUM = 1+padic_(0,10);
+Local PRODUCT = x*padic_(0,10);
+Local COEFFICIENT = 2*padic_(0,10);
+Local NESTED = f(padic_(0,10));
+Local TYPES = padic_(0,10,x);
+Local FRACTION = padic_(0,10,1/2);
+Local EXTRA = padic_(0,10,1,2);
+Local BARE = padic_;
+Local MULTIPLE = padic_(0,10)*padic_(0,10,x);
+Local MIXED = padic_(0,10)*padic_(0,10,31);
+Print;
+.sort
+Print +s F,NEGATIVE,SUM,PRODUCT;
+.end
+#require flint?
+#pend_if wordsize == 2
+assert succeeded?
+assert result("F", 0) =~ expr("padic_(0,10)")
+assert result("NEGATIVE", 0) =~ expr("-padic_(0,10)")
+assert result("SUM", 0) =~ expr("1+padic_(0,10)")
+assert result("PRODUCT", 0) =~ expr("padic_(0,10)*x")
+assert result("COEFFICIENT") =~ expr("2*padic_(0,10)")
+assert result("NESTED") =~ expr("f(padic_(0,10))")
+assert result("TYPES") =~ expr("padic_(0,10,x)")
+assert result("FRACTION") =~ expr("padic_(0,10,1/2)")
+assert result("EXTRA") =~ expr("padic_(0,10,1,2)")
+assert result("BARE") =~ expr("padic_")
+assert result("MULTIPLE") =~ expr("padic_(0,10)*padic_(0,10,x)")
+assert result("MIXED") =~ expr("(3+4*7^1)*padic_(0,10)")
+assert result("F", 1) =~ expr("+padic_(0,10)")
+assert result("NEGATIVE", 1) =~ expr("-padic_(0,10)")
+assert result("SUM", 1) =~ expr("+1+padic_(0,10)")
+assert result("PRODUCT", 1) =~ expr("+padic_(0,10)*x")
+*--#] padic_print_invalid :
 *--#[ AddWithPadic :
 #-
 Off Statistics;
