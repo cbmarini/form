@@ -2031,6 +2031,19 @@ nospec:				pcom[ncom++] = t;
 				if ( Mully(BHEAD (UWORD *)n_coef,&ncoef,(UWORD *)(t+3),t[2]) ) goto FromNorm;
 				ncoef = INCLENG(ncoef);
 				break;
+#ifdef WITHFLINT
+			case PADICLIMBS :
+/*
+				A large unit in padic_'s fourth argument is wrapped as one
+				PADICLIMBS object with coefficient 1. Leave that term unchanged.
+*/
+				if ( !TestPadicLimbTerm(term) ) goto defaultcase;
+#ifdef WITHFLOAT
+				AT.FloatPos = 0;
+#endif
+				AT.PadicPos = 0;
+				goto RegEnd;
+#endif
 			case SNUMBER :
 				if ( t[2] < 0 ) {
 					t[2] = -t[2];
@@ -4198,6 +4211,11 @@ NoRep:
 			First check whether the coefficient is already 1/1.
 	*/
 			if ( ncoef == 3 && n_coef[0] == 1 && n_coef[1] == 1 ) {
+				if ( withpadic == 1 ) {
+					padicret = NormalizePadicUnit(BHEAD padicaccum,padicfunction);
+					if ( padicret == 1 ) goto NormZero;
+					if ( padicret > 1 ) padicfunction = padicaccum;
+				}
 				AT.PadicPos = m-termout;
 				i = padicfunction[1];
 				NCOPY(m,padicfunction,i)

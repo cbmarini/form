@@ -345,6 +345,10 @@ typedef int (*TFUN1)(UBYTE *,int);
 #define MINVECTOR 10
 #define SETEXP 11
 #define DOLLAREXPR2 12
+#ifdef WITHFLINT
+#define PADICLIMBS 13
+#define PADICLIMBHEAD 3 /* type, positive object length, signed limb count */
+#endif
 #define HAAKJE0 9
 #define FUNCTION 20
 

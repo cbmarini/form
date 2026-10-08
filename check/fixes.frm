@@ -5613,3 +5613,149 @@ Print;
 assert succeeded?
 assert result("test") =~ expr("0")
 *--#] PullReq860_3 :
+*--#[ padic_unit_expansion_encodings :
+Format 255;
+Format PadicPrint off;
+CFunctions f,g;
+* The low limb of this ordinary integer equals the PADICLIMBS type number.
+Local ORDINARY = padic_(7,0,100,2^32+13);
+Local NEGATIVE = padic_(7,0,100,-(2^32+13));
+Local SHORT = padic_(7,0,100,-2147483648);
+Local ZERO = padic_(7,0,100,0);
+Local NONINTEGER = padic_(7,0,100,1/2);
+FromPadic,f;
+Print;
+.sort
+#StartPadic 7,100
+Local COMPACT = 2^64+13;
+ToPadic;
+.sort
+#EndPadic
+Local ARGUMENT = g(COMPACT);
+FromPadic,f;
+Print COMPACT,ARGUMENT;
+.end
+#require flint?
+#pend_if wordsize == 2
+assert succeeded?
+assert result("ORDINARY", 0) =~ expr("f(7,0,100,4294967309)")
+assert result("NEGATIVE", 0) =~ expr("f(7,0,100,-4294967309)")
+assert result("SHORT", 0) =~ expr("f(7,0,100,-2147483648)")
+assert result("ZERO", 0) =~ expr("f(7,0,100,0)")
+assert result("NONINTEGER", 0) =~ expr("padic_(7,0,100,1/2)")
+assert result("COMPACT") =~ expr("f(7,0,100,18446744073709551629)")
+assert result("ARGUMENT") =~ expr("g(padic_(7,0,100,18446744073709551629))")
+*--#] padic_unit_expansion_encodings :
+*--#[ padic_mixed_function_addition :
+#StartPadic 7,100
+Off Statistics;
+Format 255;
+Format PadicPrint off;
+Symbols x;
+Local BOTH = padic_(0,10)*(padic_(7,0,100,1)+padic_(7,0,100,2));
+Local RIGHT = padic_(0,10)*(1+padic_(7,0,100,2));
+Local LEFT = padic_(0,10)*(padic_(7,0,100,2)+1);
+Local SYMBOLIC = padic_(7,0,10,x)*(padic_(7,0,100,1)+padic_(7,0,100,2));
+Local BARE = padic_*(padic_(7,0,100,1)+padic_(7,0,100,2));
+Local LARGE = padic_(0,10)*(padic_(7,0,100,2^130+13)+padic_(7,0,100,2^130+17));
+Print;
+.end
+#require flint?
+assert succeeded?
+assert result("BOTH") =~ expr("padic_(0,10)*padic_(7,0,100,3)")
+assert result("RIGHT") =~ expr("padic_(0,10)*padic_(7,0,100,3)")
+assert result("LEFT") =~ expr("padic_(0,10)*padic_(7,0,100,3)")
+assert result("SYMBOLIC") =~ expr("padic_(7,0,10,x)*padic_(7,0,100,3)")
+assert result("BARE") =~ expr("padic_*padic_(7,0,100,3)")
+assert result("LARGE") =~ expr("padic_(0,10)*padic_(7,0,100,#{2**131+30})")
+*--#] padic_mixed_function_addition :
+*--#[ padic_mixed_function_merge :
+#: termsinsmall 16
+On fewerstats 1;
+#StartPadic 7,100
+Format 255;
+Format PadicPrint off;
+Symbols x1,...,x16;
+Local F = padic_(0,10)*(x1+...+x16)^4*padic_(7,0,100,3);
+Local MIX = padic_(0,10)*(x1+x2)^8*(1+padic_(7,0,100,2));
+Local LARGE = padic_(0,10)*(x1+...+x16)^4*padic_(7,0,100,2^130+13);
+#do i=1,16
+    id x`i' = 1;
+#enddo
+Print;
+.end
+#require flint?
+assert succeeded?
+assert result("F") =~ expr("padic_(0,10)*padic_(7,0,100,196608)")
+assert result("MIX") =~ expr("padic_(0,10)*padic_(7,0,100,768)")
+assert result("LARGE") =~ expr("padic_(0,10)*padic_(7,0,100,#{16**4*(2**130+13)})")
+*--#] padic_mixed_function_merge :
+*--#[ padic_mixed_coefficient_sort_order :
+#StartPadic 7,5
+Off Statistics;
+On LowFirst;
+Symbols a;
+Local F = 1/2*a+1;
+ToPadic;
+.sort
+Local FORWARD = F-1/2*a-1;
+Local REVERSE = -1-1/2*a+F;
+Local NEGATED = 1+1/2*a-F;
+Print FORWARD,REVERSE,NEGATED;
+.end
+#require flint?
+assert succeeded?
+assert result("FORWARD") =~ expr("0")
+assert result("REVERSE") =~ expr("0")
+assert result("NEGATED") =~ expr("0")
+*--#] padic_mixed_coefficient_sort_order :
+*--#[ padic_mixed_coefficient_sort_objects :
+#StartPadic 7,100
+Off Statistics;
+On LowFirst;
+Symbols a,b;
+Vectors p,q;
+CFunctions f;
+Local F = (2^130+13)*a+1;
+Local FUN = 1/2*f(a)+1;
+Local DOT = 1/3*p.q+1;
+Local POWER = 1/5/a+1;
+Local MONOMIAL = 1/2*a*b+1;
+ToPadic;
+.sort
+Local LARGE = F-(2^130+13)*a-1;
+Local FUNCTION = FUN-1/2*f(a)-1;
+Local DOTPRODUCT = DOT-1/3*p.q-1;
+Local NEGPOWER = POWER-1/5/a-1;
+Local PRODUCT = MONOMIAL-1/2*a*b-1;
+Print LARGE,FUNCTION,DOTPRODUCT,NEGPOWER,PRODUCT;
+.sort
+On HighFirst;
+Local HIGH = F-(2^130+13)*a-1;
+Print HIGH;
+.end
+#require flint?
+assert succeeded?
+assert result("LARGE") =~ expr("0")
+assert result("FUNCTION") =~ expr("0")
+assert result("DOTPRODUCT") =~ expr("0")
+assert result("NEGPOWER") =~ expr("0")
+assert result("PRODUCT") =~ expr("0")
+assert result("HIGH") =~ expr("0")
+*--#] padic_mixed_coefficient_sort_objects :
+*--#[ padic_mixed_coefficient_patch_merge :
+#: termsinsmall 16
+#StartPadic 7,100
+Off Statistics;
+On LowFirst;
+Symbols a,b1,...,b8;
+Local F = (1/2*a+1)*(1+b1+...+b8)^3;
+ToPadic;
+.sort
+Local ZERO = F-(1/2*a+1)*(1+b1+...+b8)^3;
+Print ZERO;
+.end
+#require flint?
+assert succeeded?
+assert result("ZERO") =~ expr("0")
+*--#] padic_mixed_coefficient_patch_merge :
