@@ -1775,6 +1775,11 @@ int StrictRounding(PHEAD WORD *, WORD, WORD, WORD);
 #endif
 
 #ifdef WITHFLINT
+int TestPadic(WORD *);
+int TestPadicLimbTerm(const WORD *);
+int ExpandPadicArgument(WORD *, const WORD *);
+int ConvertPadicLimbs32(int32_t *, LONG, const int32_t *, int, int);
+
 int DoStartPadic(UBYTE *);
 int DoEndPadic(UBYTE *);
 int StartPadicSystem(UBYTE *, LONG);
@@ -1792,7 +1797,7 @@ int MulPadics(PHEAD WORD *, WORD *, WORD *);
 int DivPadics(PHEAD WORD *, WORD *, WORD *);
 int InvPadic(PHEAD WORD *, WORD *);
 int MulRatToPadic(PHEAD WORD *, WORD *, UWORD *, WORD);
-int TestPadic(WORD *);
+int NormalizePadicUnit(PHEAD WORD *, WORD *);
 void CheckPadicPrime(WORD *);
 #endif
 

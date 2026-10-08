@@ -1412,6 +1412,17 @@ void WriteArgument(WORD *t)
 	lowestlevel = 0;
 	if ( *t > 0 ) {
 		oldoutsidefun = AC.outsidefun; AC.outsidefun = 0;
+#ifdef WITHFLINT
+		if ( t[ARGHEAD] == *t-ARGHEAD && TestPadicLimbTerm(t+ARGHEAD) ) {
+			LONG size = ARGHEAD+2*(LONG)ABS(t[ARGHEAD+PADICLIMBHEAD])+2;
+			WORD *expanded;
+			expanded = Malloc1((size_t)size*sizeof(WORD),"PrintPadicUnit");
+			ExpandPadicArgument(expanded,t);
+			WriteExpression(expanded+ARGHEAD,size-ARGHEAD);
+			M_free(expanded,"PrintPadicUnit");
+		}
+		else
+#endif
 		WriteExpression(t+ARGHEAD,(LONG)(*t-ARGHEAD));
 		AC.outsidefun = oldoutsidefun;
 		goto CleanUp;

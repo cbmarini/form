@@ -2433,6 +2433,16 @@ WORD Compare1(PHEAD WORD *term1, WORD *term2, WORD level)
 	t1 = term1 + 1;
 	t2 = term2 + 1;
 	while ( t1 < stopper1 && t2 < stopper2 ) {
+#ifdef WITHFLINT
+		if ( level == 0 && AC.activePadic ) {
+			WORD padic1 = *t1 == PADICFUN && t1+t1[1] == stopper1 && TestPadic(t1);
+			WORD padic2 = *t2 == PADICFUN && t2+t2[1] == stopper2 && TestPadic(t2);
+			/* A terminal p-adic coefficient ends the monomial, just like a rational. */
+			if ( padic1 && padic2 ) { AT.SortPadicMode = 3; return(0); }
+			if ( padic1 ) return(PREV(AR.SortType == SORTLOWFIRST ? 1 : -1));
+			if ( padic2 ) return(PREV(AR.SortType == SORTLOWFIRST ? -1 : 1));
+		}
+#endif
 		if ( *t1 != *t2 ) {
 			if ( *t1 == HAAKJE ) return(PREV(-1));
 			if ( *t2 == HAAKJE ) return(PREV(1));
@@ -2464,6 +2474,18 @@ WORD Compare1(PHEAD WORD *term1, WORD *term2, WORD level)
 		}
 		if ( c1 <= (FUNCTION-1)
 		|| ( c1 >= FUNCTION && functions[c1-FUNCTION].spec > 0 ) ) {
+#ifdef WITHFLINT
+			if ( c1 == PADICLIMBS ) {
+				/* Limbs span the full unsigned WORD range; never subtract them. */
+				while ( s1 < t1 && s2 < t2 ) {
+					if ( *s1 != *s2 ) return(PREV(*s1 < *s2 ? 1 : -1));
+					s1++; s2++;
+				}
+				if ( s1 < t1 ) return(PREV(-1));
+				if ( s2 < t2 ) return(PREV(1));
+			}
+			else
+#endif
 			if ( c1 == SYMBOL ) {
 				if ( *s1 == FACTORSYMBOL && *s2 == FACTORSYMBOL
 				 && s1[-1] == 4 && s2[-1] == 4
@@ -2754,18 +2776,6 @@ NoPoly:
 					else { return(1); }
 				}
 				else if ( TestFloat(s2-FUNHEAD) ) { return(-1); }
-			}
-#endif
-#ifdef WITHFLINT
-			if ( level == 0 && c1 == PADICFUN && t1 == stopper1 && t2 == stopper2 && AC.activePadic ) {
-/*
-				We have two PADICFUN's. Test whether they are 'legal'.
-*/
-				if ( TestPadic(s1-FUNHEAD) ) {
-					if ( TestPadic(s2-FUNHEAD) ) { AT.SortPadicMode = 3; return(0); }
-					else { return(1); }
-				}
-				else if ( TestPadic(s2-FUNHEAD) ) { return(-1); }
 			}
 #endif
 			while ( s1 < t1 ) {
