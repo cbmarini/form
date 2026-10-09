@@ -57,7 +57,7 @@
 #include <flint/fmpz.h>
 #include <flint/fmpq.h>
 #include <flint/padic.h>
-#include <flint/longlong.h>
+#include <flint/ulong_extras.h>
 
 #if defined(WINDOWS)
 // Redefine WORD here to match form3.h.
@@ -108,6 +108,21 @@ typedef struct PADIC_AUX_ {
 #define paux3 (PadicAux->p3)
 #define pauxq1 (PadicAux->q1)
 #define pauxprime (PadicAux->prime)
+
+static WORD GetPadicInteger(fmpz_t in, WORD *out);
+static void SetPadicInteger(fmpz_t out, UWORD *in, WORD count);
+static int TestNativePadicShape(const WORD *fun);
+static int UnpackedPadicKnownReduced(const padic_t in, const WORD *arg);
+static void SetPadicRational(padic_t out, const fmpq_t in);
+static void ReduceSmallPadicQuotient(fmpz_t unit, const fmpz_t modulus, const fmpq_t q, int bounded);
+static int SmallPadicRationalFits(slong N, const fmpq_t q);
+static void DivideSmallPadicRational(padic_t out, const fmpq_t q, int bounded);
+static int MultiplyNegativePadicFraction(PHEAD padic_t out, const padic_t in, const fmpq_t q);
+static const fmpz *CachedPadicModulus(fmpz_t scratch, slong N, slong v);
+static void MultiplyReducedPadics(padic_t out, const padic_t left, const padic_t right, fmpz_t scratch);
+static void AddReducedPadics(PHEAD padic_t out, const padic_t in1, const padic_t in2);
+static int AddPadics(PHEAD WORD *outfun, WORD *in1, WORD *in2);
+static int AddRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat);
 
 /*
  	#] Includes : 
@@ -255,12 +270,12 @@ int StartPadicSystem(UBYTE *p, LONG N)
 		}
 		PadicPrecision = N;
 		/*
-			FLINT contexts cache nonnegative powers p^e, min <= e <= max and
-			require 0 <= min <= max. For N < 0 an empty cache range is sufficient
+			FLINT contexts cache nonnegative powers p^e, min <= e < max.
+			Include p^N when representable. For N < 0 an empty range is sufficient
 			and FLINT computes any needed positive powers on demand.
 		*/
 		ActivePadicContext = Malloc1(sizeof(padic_ctx_struct),"PadicContext");
-		ctxmax = (N > 0) ? (slong)N : 0;
+		ctxmax = (N > 0) ? (slong)(N+(N < (FLINT_BITS == 64 ? INT64_MAX : INT32_MAX))) : 0;
 		padic_ctx_init(PadicContext,prime,0,ctxmax,PADIC_SERIES);
 		// Allocate the auxiliary variables
 		AllocatePadicAux();
@@ -303,6 +318,65 @@ void ClearPadicSystem(void)
 }
 /*
  		#] ClearPadicSystem :
+ 		#[ GetPadicInteger :
+
+	Converts a FLINT integer to the internal FORM integer encoding.
+	On the supported limb layout, copy positive integers directly from a
+	read-only GMP view. Small integers, negative integers and other layouts
+	use the shared conversion, including its established sign handling.
+*/
+static WORD GetPadicInteger(fmpz_t in, WORD *out)
+{
+#if BITSINWORD == 32 && FLINT_BITS == 64 && GMP_NUMB_BITS == 64 && GMP_NAIL_BITS == 0 && defined(mpz_limbs_read)
+	slong n = fmpz_size(in), i;
+	if ( n > 2 && fmpz_sgn(in) > 0 ) {
+		mpz_t view;
+		mp_srcptr limbs;
+		WORD count = (WORD)(2*n);
+		flint_mpz_init_set_readonly(view,in);
+		limbs = mpz_limbs_read(view);
+		for ( i = 0; i < n; i++ ) {
+			out[2*i] = (WORD)(UWORD)limbs[i];
+			out[2*i+1] = (WORD)(UWORD)(limbs[i] >> BITSINWORD);
+		}
+		flint_mpz_clear_readonly(view);
+		if ( out[count-1] == 0 ) count--;
+		return(count);
+	}
+#endif
+	return(flint_fmpz_get_form(in,out));
+}
+/*
+ 		#] GetPadicInteger :
+ 		#[ SetPadicInteger :
+
+	Converts the internal FORM integer encoding to a FLINT integer.
+	On the supported limb layout, combine at most 256 FORM words in a fixed
+	128-limb (1 KiB) buffer. Other layouts and sizes use the shared conversion.
+*/
+static void SetPadicInteger(fmpz_t out, UWORD *in, WORD count)
+{
+#if BITSINWORD == 32 && FLINT_BITS == 64 && GMP_NUMB_BITS == 64 && GMP_NAIL_BITS == 0
+	LONG n = count, i;
+	if ( n < 0 ) n = -n;
+	if ( n > 4 && n <= 256 ) {
+		ulong limbs[128];
+		while ( n > 0 && in[n-1] == 0 ) n--;
+		if ( n > 4 ) {
+			for ( i = 0; i < (n+1)/2; i++ ) {
+				limbs[i] = (ulong)in[2*i];
+				if ( 2*i+1 < n ) limbs[i] |= (ulong)in[2*i+1] << BITSINWORD;
+			}
+			fmpz_set_ui_array(out,limbs,(slong)((n+1)/2));
+			if ( count < 0 ) fmpz_neg(out,out);
+			return;
+		}
+	}
+#endif
+	flint_fmpz_set_form(out,in,count);
+}
+/*
+ 		#] SetPadicInteger :
   	#] Helpers :
   	#[ Internal p-adic function format :
  		#[ Explanations :
@@ -362,6 +436,30 @@ int ExpandPadicArgument(WORD *out, const WORD *arg)
 }
 /*
  		#] ExpandPadicArgument :
+ 		#[ TestNativePadicShape :
+
+	Checks the common padic_(p,v,N,u) encoding with WORD-sized p, v and N.
+	The unit may be a small number or a compact limb term. Return 1 for a
+	valid shape, otherwise 0 so TestPadic performs its general checks.
+	This checks the encoding only; it does not certify a reduced unit.
+*/
+static int TestNativePadicShape(const WORD *fun)
+{
+	const WORD *arg;
+	WORD length = fun[1];
+	if ( length < FUNHEAD+8 ) return(0);
+	arg = fun+FUNHEAD;
+	if ( arg[0] != -SNUMBER || arg[1] <= 1
+	 || arg[2] != -SNUMBER || arg[4] != -SNUMBER ) return(0);
+	arg += 6;
+	if ( arg[0] == -SNUMBER ) return(length == FUNHEAD+8);
+	if ( length < FUNHEAD+6+ARGHEAD+PADICLIMBHEAD+5
+	 || arg[0] != length-FUNHEAD-6
+	 || arg[ARGHEAD] != arg[0]-ARGHEAD ) return(0);
+	return(TestPadicLimbTerm(arg+ARGHEAD));
+}
+/*
+ 		#] TestNativePadicShape :
  		#[ TestPadic :
 
 	Checks whether fun has the shape of a legal padic_ with its arguments:
@@ -375,7 +473,7 @@ int TestPadic(WORD *fun)
 {
 	WORD *f, *fstop;
 	WORD nargs, nnum, i;
-
+	if ( TestNativePadicShape(fun) ) return(1);
 	f = fun + FUNHEAD;
 	fstop = fun + fun[1];
 	nargs = 0;
@@ -543,14 +641,14 @@ static void UnpackPadic(padic_t out, WORD *fun)
 	else if ( f[ARGHEAD] == ABS(f[*f-1])+1 ) {
 		WORD size = f[*f-1], nnum = (WORD)((ABS(size)-1)/2);
 		while ( nnum && f[ARGHEAD+nnum] == 0 ) nnum--;
-		flint_fmpz_set_form(padic_unit(out),(UWORD *)(f+ARGHEAD+1),
+		SetPadicInteger(padic_unit(out),(UWORD *)(f+ARGHEAD+1),
 			(size < 0) ? -nnum : nnum);
 	}
 	else {
-		flint_fmpz_set_form(padic_unit(out),(UWORD *)(f+ARGHEAD+1+PADICLIMBHEAD),
+		SetPadicInteger(padic_unit(out),(UWORD *)(f+ARGHEAD+1+PADICLIMBHEAD),
 			f[ARGHEAD+PADICLIMBHEAD]);
 	}
-
+	if ( UnpackedPadicKnownReduced(out,f) ) return;
 	padic_reduce(out,PadicContext);
 }
 /*
@@ -588,7 +686,7 @@ static int PackPadic(WORD *fun, padic_t in)
 	}
 	else {
 		arg = t + ARGHEAD + 1;
-		nnum = flint_fmpz_get_form(PadicContext->p,arg);
+		nnum = GetPadicInteger(PadicContext->p,arg);
 		arg += nnum;
 		*arg++ = 1;
 		for ( i = 1; i < nnum; i++ ) *arg++ = 0;
@@ -632,7 +730,7 @@ static int PackPadic(WORD *fun, padic_t in)
 	}
 	else {
 		arg = t + ARGHEAD + 1 + PADICLIMBHEAD;
-		nnum = flint_fmpz_get_form(padic_unit(in),arg);
+		nnum = GetPadicInteger(padic_unit(in),arg);
 		nabs = ABS(nnum);
 		t[0] = ARGHEAD + 1 + PADICLIMBHEAD + nabs + 3;
 		for ( i = 1; i < ARGHEAD; i++ ) t[i] = 0;
@@ -652,13 +750,11 @@ static int PackPadic(WORD *fun, padic_t in)
  		#] PackPadic :
  		#[ PadicUnitKnownReduced :
 
-	Certify a positive unit without importing or allocating. For a WORD-sized
-	prime, check divisibility directly and use an integer lower bound on p^k.
-	The bit bound suffices for small units. Near a power of two, Bernoulli's
-	inequality gives p^k >= (2^b-k*(2^b-p))*2^(b*(k-1)). If neither bound
-	certifies the range, the caller falls back to FLINT; there is no rounding.
+	Certify a positive unit using exact bounds on p^k and divisibility.
+	Near powers of two, p^k >= (2^b-k*(2^b-p))*2^(b*(k-1)).
+	Uncertain bounds retain FLINT; imported units may reuse GMP's remainder.
 */
-static int PadicUnitKnownReduced(const UWORD *limbs, WORD count, LONG v, LONG N)
+static int PadicUnitKnownReduced(const UWORD *limbs, WORD count, LONG v, LONG N, const fmpz *imported)
 {
 	ULONG p, k, bits, pbits, base, delta, lower, shift, top, rem = 0;
 	LONG i, offset;
@@ -669,7 +765,7 @@ static int PadicUnitKnownReduced(const UWORD *limbs, WORD count, LONG v, LONG N)
 	k = (ULONG)N-(ULONG)v;
 	bits = (ULONG)(count-1)*BITSINWORD+FLINT_BIT_COUNT(limbs[count-1]);
 	pbits = FLINT_BIT_COUNT(p)-1;
-	inrange = k >= (bits+pbits-1)/pbits;
+	inrange = k >= bits || k*pbits >= bits;
 	if ( !inrange ) {
 		pbits = FLINT_BIT_COUNT(p-1);
 		base = (ULONG)1 << pbits;
@@ -689,11 +785,48 @@ static int PadicUnitKnownReduced(const UWORD *limbs, WORD count, LONG v, LONG N)
 		}
 	}
 	if ( !inrange ) return(0);
+	if ( BITSINWORD == 32 && FLINT_BITS == 64 && GMP_NUMB_BITS == 64 && GMP_NAIL_BITS == 0
+	 && imported && count >= 12 ) return(fmpz_fdiv_ui(imported,(ulong)p) != 0);
 	for ( i = count-1; i >= 0; i-- ) rem = ((rem << BITSINWORD)+limbs[i]) % p;
 	return(rem != 0);
 }
 /*
  		#] PadicUnitKnownReduced :
+ 		#[ UnpackedPadicKnownReduced :
+
+	Checks whether the unit imported from a validated padic_ carrier is
+	already reduced. Reuse its FORM limbs for the range bound and its
+	FLINT integer for the divisibility check when useful. Return 1 only
+	when both checks succeed within FLINT's supported exponent range;
+	otherwise UnpackPadic must call padic_reduce.
+*/
+static int UnpackedPadicKnownReduced(const padic_t in, const WORD *arg)
+{
+	const UWORD *limbs;
+	UWORD small;
+	WORD count;
+	slong N = padic_prec(in), v = padic_val(in);
+	if ( N <= v || (ulong)N-(ulong)v
+		> (ulong)(FLINT_BITS == 64 ? INT64_MAX : INT32_MAX) ) return(0);
+	if ( *arg == -SNUMBER ) {
+		if ( arg[1] <= 0 ) return(0);
+		small = (UWORD)arg[1]; limbs = &small; count = 1;
+	}
+	else if ( arg[ARGHEAD] == ABS(arg[*arg-1])+1 ) {
+		WORD size = arg[*arg-1];
+		if ( size < 0 ) return(0);
+		count = (WORD)((size-1)/2);
+		limbs = (const UWORD *)(arg+ARGHEAD+1);
+		while ( count && limbs[count-1] == 0 ) count--;
+	}
+	else {
+		count = arg[ARGHEAD+PADICLIMBHEAD];
+		limbs = (const UWORD *)(arg+ARGHEAD+1+PADICLIMBHEAD);
+	}
+	return(PadicUnitKnownReduced(limbs,count,v,N,padic_unit(in)));
+}
+/*
+ 		#] UnpackedPadicKnownReduced :
  		#[ NormalizePadicUnit :
 
 	Normalize a lone coefficient only after the rational coefficient and any
@@ -735,7 +868,7 @@ int NormalizePadicUnit(PHEAD WORD *out, WORD *fun)
 		count = arg[ARGHEAD+PADICLIMBHEAD];
 		limbs = (const UWORD *)(arg+ARGHEAD+1+PADICLIMBHEAD);
 	}
-	if ( count > 0 && PadicUnitKnownReduced(limbs,count,v,N) ) return(0);
+	if ( count > 0 && PadicUnitKnownReduced(limbs,count,v,N,NULL) ) return(0);
 	UnpackPadic(paux1,fun);
 	if ( padic_is_zero(paux1) ) return(1);
 	if ( v == padic_val(paux1) && count > 0 ) {
@@ -789,17 +922,239 @@ static void FormRatToFmpq(fmpq_t result, UWORD *formrat, WORD ratsize)
 	while ( nden > 0 && den[nden-1] == 0 ) nden--;
 
 	if ( nnum > 0 ) {
-		flint_fmpz_set_form(fmpq_numref(result),num,sign*nnum);
+		SetPadicInteger(fmpq_numref(result),num,sign*nnum);
 	}
 	else {
 		fmpz_zero(fmpq_numref(result));
 	}
-	flint_fmpz_set_form(fmpq_denref(result),den,nden);
+	SetPadicInteger(fmpq_denref(result),den,nden);
 
 	fmpq_canonicalise(result);
 }
 /*
 		#] FormRatToFmpq :
+ 		#[ SetPadicRational :
+
+	Converts a canonical rational to a p-adic at the output precision.
+	Use the integer conversion or the small-fraction shortcut when possible.
+	Other fractions use the general FLINT conversion.
+*/
+static void SetPadicRational(padic_t out, const fmpq_t in)
+{
+	if ( fmpz_is_one(fmpq_denref(in)) )
+		padic_set_fmpz(out,fmpq_numref(in),PadicContext);
+	else if ( SmallPadicRationalFits(padic_prec(out),in) ) {
+		fmpz_set(padic_unit(out),fmpq_numref(in));
+		padic_val(out) = 0;
+		DivideSmallPadicRational(out,in,1);
+	}
+	else padic_set_fmpq(out,in,PadicContext);
+}
+/*
+ 		#] SetPadicRational :
+ 		#[ ReduceSmallPadicQuotient :
+
+	Reduces the quotient modulo M = modulus after exact division.
+	For a proper fraction and an input unit below M, the quotient is in
+	(-M,2M), so one addition or subtraction suffices. Without that bound,
+	use the general remainder operation.
+*/
+static void ReduceSmallPadicQuotient(fmpz_t unit, const fmpz_t modulus, const fmpq_t q, int bounded)
+{
+	if ( bounded && fmpz_cmpabs(fmpq_numref(q),fmpq_denref(q)) < 0 ) {
+		if ( fmpz_sgn(unit) < 0 ) fmpz_add(unit,unit,modulus);
+		else if ( fmpz_cmp(unit,modulus) >= 0 ) fmpz_sub(unit,unit,modulus);
+	}
+	else fmpz_mod(unit,unit,modulus);
+}
+/*
+ 		#] ReduceSmallPadicQuotient :
+ 		#[ SmallPadicRationalFits :
+
+	Checks the precision and fraction bounds for the small-rational shortcut.
+*/
+static int SmallPadicRationalFits(slong N, const fmpq_t q)
+{
+	return(N > 0 && !fmpz_is_zero(fmpq_numref(q))
+	 && fmpz_cmpabs(fmpq_numref(q),PadicContext->p) < 0
+	 && fmpz_cmp_ui(fmpq_denref(q),1) > 0
+	 && fmpz_cmp(fmpq_denref(q),PadicContext->p) < 0
+	 && fmpz_cmp_ui(fmpq_denref(q),WORD_MAX_VALUE) <= 0);
+}
+/*
+ 		#] SmallPadicRationalFits :
+ 		#[ DivideSmallPadicRational :
+
+	Divides the prepared unit numerator by the small fraction's denominator
+	modulo p^(N-v). The caller has checked the fraction and set the valuation.
+*/
+static void DivideSmallPadicRational(padic_t out, const fmpq_t q, int bounded)
+{
+	slong N = padic_prec(out), v = padic_val(out);
+	fmpz_t modulus;
+	ulong d, inverse, remainder, correction;
+	int owned;
+	d = fmpz_get_ui(fmpq_denref(q));
+	owned = _padic_ctx_pow_ui(modulus,(ulong)(N-v),PadicContext);
+	inverse = n_invmod(fmpz_fdiv_ui(modulus,d),d);
+	remainder = fmpz_fdiv_ui(padic_unit(out),d);
+	correction = remainder ? d-n_mulmod2(remainder,inverse,d) : 0;
+	fmpz_addmul_ui(padic_unit(out),modulus,correction);
+	fmpz_divexact_ui(padic_unit(out),padic_unit(out),d);
+	ReduceSmallPadicQuotient(padic_unit(out),modulus,q,bounded);
+	if ( fmpz_is_zero(padic_unit(out)) ) padic_val(out) = 0;
+	if ( owned ) fmpz_clear(modulus);
+}
+/*
+ 		#] DivideSmallPadicRational :
+ 		#[ MultiplyNegativePadicFraction :
+
+	Multiplies a reduced input u*p^v, v < 0, by a small fraction a/d.
+	Preserve the rational converted at N: c = (a+k*p^N)/d. Only u*k modulo
+	p^-v contributes to u*c modulo p^(N-v). Correct the shortened numerator
+	before exact division rather than converting a/d directly at N-v.
+
+	Uses thread-local auxiliary integers as scratch, distinct from the
+	input and output units. Both powers must already be cached.
+	Return 1 when handled, or 0 to retain the general FLINT calculation.
+*/
+static int MultiplyNegativePadicFraction(PHEAD padic_t out, const padic_t in, const fmpq_t q)
+{
+	slong N = padic_prec(out), v = padic_val(in);
+	fmpz *modulus = pauxprime, *low = padic_unit(paux2);
+	fmpz_t base, lowmod;
+	ulong d, inverse, remainder, correction;
+	if ( v < -N || (ulong)N-(ulong)v > (ulong)(FLINT_BITS == 64 ? INT64_MAX : INT32_MAX) ) return(0);
+	if ( _padic_ctx_pow_ui(base,(ulong)N,PadicContext) ) { fmpz_clear(base); return(0); }
+	if ( _padic_ctx_pow_ui(lowmod,(ulong)-v,PadicContext) ) { fmpz_clear(lowmod); return(0); }
+	d = fmpz_get_ui(fmpq_denref(q));
+	inverse = n_invmod(fmpz_fdiv_ui(base,d),d);
+	remainder = fmpz_fdiv_ui(fmpq_numref(q),d);
+	correction = remainder ? d-n_mulmod2(remainder,inverse,d) : 0;
+	fmpz_mul(modulus,base,lowmod);
+	fmpz_mod(low,padic_unit(in),lowmod);
+	fmpz_mul_ui(low,low,correction);
+	fmpz_mod(low,low,lowmod);
+	fmpz_mul(low,low,base);
+	fmpz_mul(padic_unit(out),padic_unit(in),fmpq_numref(q));
+	fmpz_add(padic_unit(out),padic_unit(out),low);
+	inverse = n_invmod(fmpz_fdiv_ui(modulus,d),d);
+	remainder = fmpz_fdiv_ui(padic_unit(out),d);
+	correction = remainder ? d-n_mulmod2(remainder,inverse,d) : 0;
+	fmpz_addmul_ui(padic_unit(out),modulus,correction);
+	fmpz_divexact_ui(padic_unit(out),padic_unit(out),d);
+	ReduceSmallPadicQuotient(padic_unit(out),modulus,q,padic_prec(in) <= N);
+	padic_val(out) = fmpz_is_zero(padic_unit(out)) ? 0 : v;
+	return(1);
+}
+/*
+ 		#] MultiplyNegativePadicFraction :
+ 		#[ CachedPadicModulus :
+
+	Returns the modulus p^(N-v) from the existing context cache, or from
+	the product of two cached powers when v is negative. Return NULL when
+	the required powers or exponent range are unavailable.
+
+	The initialized scratch integer must be distinct from the arithmetic
+	operands. The returned pointer is borrowed and must not be cleared.
+*/
+static const fmpz *CachedPadicModulus(fmpz_t scratch, slong N, slong v)
+{
+	ulong exponent;
+	if ( N <= v ) return(NULL);
+	exponent = (ulong)N-(ulong)v;
+	if ( exponent > (ulong)(FLINT_BITS == 64 ? INT64_MAX : INT32_MAX) ) return(NULL);
+	if ( PadicContext->min <= (slong)exponent && (slong)exponent < PadicContext->max )
+		return(PadicContext->pow+((slong)exponent-PadicContext->min));
+	if ( N <= 0 || v >= 0 || v < -N
+	 || N < PadicContext->min || N >= PadicContext->max
+	 || -v < PadicContext->min || -v >= PadicContext->max ) return(NULL);
+	fmpz_mul(scratch,PadicContext->pow+(N-PadicContext->min),
+		PadicContext->pow+(-v-PadicContext->min));
+	return(scratch);
+}
+/*
+ 		#] CachedPadicModulus :
+ 		#[ MultiplyReducedPadics :
+
+	Multiplies two reduced p-adics at the output precision. Reduce the unit
+	product with a cached modulus when the valuation sum is representable.
+	Other cases use FLINT. The rational operand, if any, has already been
+	converted at N, including when the other operand has negative valuation.
+	The initialized scratch integer must be distinct from all operand units.
+*/
+static void MultiplyReducedPadics(padic_t out, const padic_t left, const padic_t right, fmpz_t scratch)
+{
+	slong v1 = padic_val(left), v2 = padic_val(right), v;
+	slong maximum = FLINT_BITS == 64 ? INT64_MAX : INT32_MAX;
+	slong minimum = FLINT_BITS == 64 ? INT64_MIN : INT32_MIN;
+	const fmpz *modulus;
+	if ( padic_is_zero(left) || padic_is_zero(right) ) { padic_zero(out); return; }
+	if ( (v2 > 0 && v1 > maximum-v2) || (v2 < 0 && v1 < minimum-v2) ) goto fallback;
+	v = v1+v2;
+	if ( v >= padic_prec(out) ) { padic_zero(out); return; }
+	modulus = CachedPadicModulus(scratch,padic_prec(out),v);
+	if ( !modulus ) goto fallback;
+	fmpz_mul(padic_unit(out),padic_unit(left),padic_unit(right));
+	fmpz_mod(padic_unit(out),padic_unit(out),modulus);
+	padic_val(out) = fmpz_is_zero(padic_unit(out)) ? 0 : v;
+	return;
+fallback:
+	padic_mul(out,left,right,PadicContext);
+}
+/*
+ 		#] MultiplyReducedPadics :
+ 		#[ AddReducedPadics :
+
+	Adds two reduced p-adics at the output precision, using the cached
+	modulus when precision and valuation match. Other cases use FLINT.
+	Uses the thread-local auxiliary integer as scratch for the modulus.
+*/
+static void AddReducedPadics(PHEAD padic_t out, const padic_t in1, const padic_t in2)
+{
+	slong N = padic_prec(out), v = padic_val(in1);
+	const fmpz *modulus;
+	/* The unit shortcut requires matching precision and valuation. */
+	if ( v != padic_val(in2) || N != padic_prec(in1) || N != padic_prec(in2) ) goto fallback;
+	modulus = CachedPadicModulus(pauxprime,N,v);
+	if ( !modulus ) goto fallback;
+	/* Each unit is below the modulus, so one subtraction suffices. */
+	fmpz_add(padic_unit(out),padic_unit(in1),padic_unit(in2));
+	if ( fmpz_cmp(padic_unit(out),modulus) >= 0 )
+		fmpz_sub(padic_unit(out),padic_unit(out),modulus);
+	padic_val(out) = v;
+	/* Remove prime factors from the unit and update the valuation. */
+	_padic_canonicalise(out,PadicContext);
+	return;
+fallback:
+	padic_add(out,in1,in2,PadicContext);
+}
+/*
+ 		#] AddReducedPadics :
+ 		#[ AddRatToPadic :
+
+	Adds a FORM rational coefficient to a padic_ function in infun.
+	The rational is converted at the active output precision.
+
+	Return value:
+	- 0  on success, with a non-zero sum packed into outfun,
+	- 1  if the sum is p-adic zero,
+	- -1 on runtime/validation failure.
+*/
+static int AddRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
+{
+	if ( !PadicActive ) return(-1);
+	UnpackPadic(paux1,infun);
+	FormRatToFmpq(pauxq1,formrat,nrat);
+	padic_prec(paux2) = PadicPrecision;
+	SetPadicRational(paux2,pauxq1);
+	AddReducedPadics(BHEAD paux3,paux1,paux2);
+	PackPadic(outfun,paux3);
+	if ( padic_is_zero(paux3) ) return(1);
+	return(0);
+}
+/*
+ 		#] AddRatToPadic :
  		#[ MulRatToPadic :
 
 	Multiplies an existing `padic_` coefficient by a FORM rational coefficient.
@@ -813,18 +1168,57 @@ static void FormRatToFmpq(fmpq_t result, UWORD *formrat, WORD ratsize)
 */
 int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 {
+	slong v;
+	int handled = 0;
 	if ( !PadicActive ) return(-1);
 	UnpackPadic(paux1,infun);
 	FormRatToFmpq(pauxq1,formrat,nrat);
-	padic_prec(paux2) = PadicPrecision;
-	padic_set_fmpq(paux2,pauxq1,PadicContext);
-	padic_mul(paux3,paux1,paux2,PadicContext);
+	v = padic_val(paux1);
+	if ( SmallPadicRationalFits(PadicPrecision,pauxq1) ) {
+		/* Preserve rational conversion at the active precision. */
+		if ( v < 0 ) handled = MultiplyNegativePadicFraction(BHEAD paux3,paux1,pauxq1);
+		else {
+			if ( v >= PadicPrecision ) padic_zero(paux3);
+			else {
+				fmpz_mul(padic_unit(paux3),padic_unit(paux1),fmpq_numref(pauxq1));
+				padic_val(paux3) = v;
+				DivideSmallPadicRational(paux3,pauxq1,padic_prec(paux1) <= PadicPrecision);
+			}
+			handled = 1;
+		}
+	}
+	if ( !handled ) {
+		padic_prec(paux2) = PadicPrecision;
+		SetPadicRational(paux2,pauxq1);
+		MultiplyReducedPadics(paux3,paux1,paux2,pauxprime);
+	}
 	PackPadic(outfun,paux3);
 	if ( padic_is_zero(paux3) ) return(1);
 	return(0);
 }
 /*
  		#] MulRatToPadic :
+ 		#[ AddPadics :
+
+	Adds two padic_ functions (in1 + in2) and stores the sum in outfun.
+
+	Return value:
+	- 0  on success, with a non-zero sum packed into outfun,
+	- 1  if the sum is p-adic zero,
+	- -1 on runtime/validation failure.
+*/
+static int AddPadics(PHEAD WORD *outfun, WORD *in1, WORD *in2)
+{
+	if ( !PadicActive ) return(-1);
+	UnpackPadic(paux1,in1);
+	UnpackPadic(paux2,in2);
+	AddReducedPadics(BHEAD paux3,paux1,paux2);
+	PackPadic(outfun,paux3);
+	if ( padic_is_zero(paux3) ) return(1);
+	return(0);
+}
+/*
+ 		#] AddPadics :
  		#[ MulPadics :
 
 	Multiplies two padic_ functions (fun1 * fun2) and stores the
@@ -1230,7 +1624,7 @@ int ToPadic(PHEAD WORD *term, WORD level)
 
 	FormRatToFmpq(pauxq1,(UWORD *)tstop,ncoef);
 	padic_prec(paux1) = PadicPrecision;
-	padic_set_fmpq(paux1,pauxq1,PadicContext);
+	SetPadicRational(paux1,pauxq1);
 	if ( padic_is_zero(paux1) ) return(0);
 	// Overwrite the old rational coefficient of the term by padic_(p,v,N,u)
 	// and append rational coefficient 1/1.
@@ -1393,6 +1787,7 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 	SORTING *S = AT.SS;
 	WORD *coef1, *coef2, size1, size2, *fun1, *fun2, *fun3;
 	WORD *s1, *s2, *t1, *t2, i, j, jj;
+	int padicret;
 
 	if ( !PadicActive ) return(0);
 
@@ -1403,33 +1798,19 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 
 	/* Compare1 validated the final object as the p-adic coefficient. */
 	if ( AT.SortPadicMode == 3 ) {
-		/* Both coefficients are padic_: unpack and apply external +/- sign. */
+		/* Both coefficients are normalized padic_ records. */
 		fun1 = s1+1; while ( fun1+fun1[1] < coef1 ) fun1 += fun1[1];
 		fun2 = s2+1; while ( fun2+fun2[1] < coef2 ) fun2 += fun2[1];
-		UnpackPadic(paux1,fun1);
-		if ( size1 < 0 ) padic_neg(paux1,paux1,PadicContext);
-		UnpackPadic(paux2,fun2);
-		if ( size2 < 0 ) padic_neg(paux2,paux2,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 1 ) {
 		/* First coefficient is padic_, second is rational. */
 		fun1 = s1+1; while ( fun1+fun1[1] < coef1 ) fun1 += fun1[1];
-		UnpackPadic(paux1,fun1);
-		if ( size1 < 0 ) padic_neg(paux1,paux1,PadicContext);
 		fun2 = coef2;
-		FormRatToFmpq(pauxq1,(UWORD *)coef2,size2);
-		padic_prec(paux2) = PadicPrecision;
-		padic_set_fmpq(paux2,pauxq1,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
 		/* Second coefficient is padic_, first is rational. */
 		fun2 = s2+1; while ( fun2+fun2[1] < coef2 ) fun2 += fun2[1];
-		UnpackPadic(paux2,fun2);
-		if ( size2 < 0 ) padic_neg(paux2,paux2,PadicContext);
 		fun1 = coef1;
-		FormRatToFmpq(pauxq1,(UWORD *)coef1,size1);
-		padic_prec(paux1) = PadicPrecision;
-		padic_set_fmpq(paux1,pauxq1,PadicContext);
 	}
 	else {
 		MLOCK(ErrorMessageLock);
@@ -1439,16 +1820,18 @@ int AddWithPadic(PHEAD WORD **ps1, WORD **ps2)
 		return(0);
 	}
 
-	padic_add(paux3,paux1,paux2,PadicContext);
-	if ( padic_is_zero(paux3) ) {
-		/* Terms cancel. */
-		*ps1 = *ps2 = 0;
+	fun3 = TermMalloc("AddWithPadic");
+	if ( AT.SortPadicMode == 3 ) padicret = AddPadics(BHEAD fun3,fun1,fun2);
+	else if ( AT.SortPadicMode == 1 )
+		padicret = AddRatToPadic(BHEAD fun3,fun1,(UWORD *)coef2,size2);
+	else padicret = AddRatToPadic(BHEAD fun3,fun2,(UWORD *)coef1,size1);
+	if ( padicret != 0 ) {
+		TermFree(fun3,"AddWithPadic");
+		/* Terms cancel. A failed conversion leaves the inputs intact. */
+		if ( padicret > 0 ) *ps1 = *ps2 = 0;
 		AT.SortPadicMode = 0;
 		return(0);
 	}
-
-	fun3 = TermMalloc("AddWithPadic");
-	PackPadic(fun3,paux3);
 
 	if ( AT.SortPadicMode == 3 ) {
 		/* Prefer overwriting an existing padic_ record in-place if it fits. */
@@ -1519,7 +1902,7 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 	GETBIDENTITY
 	WORD *coef1, *coef2, size1, size2, *fun1, *fun2, *fun3, *tt;
 	WORD jj, *t1, *t2, i, *term1 = *interm1, *term2 = *interm2;
-	int retval = 0;
+	int retval = 0, padicret;
 
 	if ( !PadicActive ) return(0);
 
@@ -1529,28 +1912,14 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 	if ( AT.SortPadicMode == 3 ) {
 		fun1 = term1+1; while ( fun1+fun1[1] < coef1 ) fun1 += fun1[1];
 		fun2 = term2+1; while ( fun2+fun2[1] < coef2 ) fun2 += fun2[1];
-		UnpackPadic(paux1,fun1);
-		if ( size1 < 0 ) padic_neg(paux1,paux1,PadicContext);
-		UnpackPadic(paux2,fun2);
-		if ( size2 < 0 ) padic_neg(paux2,paux2,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 1 ) {
 		fun1 = term1+1; while ( fun1+fun1[1] < coef1 ) fun1 += fun1[1];
-		UnpackPadic(paux1,fun1);
-		if ( size1 < 0 ) padic_neg(paux1,paux1,PadicContext);
 		fun2 = coef2;
-		FormRatToFmpq(pauxq1,(UWORD *)coef2,size2);
-		padic_prec(paux2) = PadicPrecision;
-		padic_set_fmpq(paux2,pauxq1,PadicContext);
 	}
 	else if ( AT.SortPadicMode == 2 ) {
 		fun2 = term2+1; while ( fun2+fun2[1] < coef2 ) fun2 += fun2[1];
 		fun1 = coef1;
-		FormRatToFmpq(pauxq1,(UWORD *)coef1,size1);
-		padic_prec(paux1) = PadicPrecision;
-		padic_set_fmpq(paux1,pauxq1,PadicContext);
-		UnpackPadic(paux2,fun2);
-		if ( size2 < 0 ) padic_neg(paux2,paux2,PadicContext);
 	}
 	else {
 		MLOCK(ErrorMessageLock);
@@ -1560,14 +1929,16 @@ int MergeWithPadic(PHEAD WORD **interm1, WORD **interm2)
 		return(0);
 	}
 
-	padic_add(paux3,paux1,paux2,PadicContext);
-	if ( padic_is_zero(paux3) ) {
+	fun3 = TermMalloc("MergeWithPadic");
+	if ( AT.SortPadicMode == 3 ) padicret = AddPadics(BHEAD fun3,fun1,fun2);
+	else if ( AT.SortPadicMode == 1 )
+		padicret = AddRatToPadic(BHEAD fun3,fun1,(UWORD *)coef2,size2);
+	else padicret = AddRatToPadic(BHEAD fun3,fun2,(UWORD *)coef1,size1);
+	if ( padicret != 0 ) {
+		TermFree(fun3,"MergeWithPadic");
 		AT.SortPadicMode = 0;
 		return(0);
 	}
-
-	fun3 = TermMalloc("MergeWithPadic");
-	PackPadic(fun3,paux3);
 	if ( AT.SortPadicMode == 3 ) {
 		if ( fun1[1] + ABS(size1) == fun3[1] + 3 ) {
 OnTopOf1:
