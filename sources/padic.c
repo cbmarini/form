@@ -217,6 +217,8 @@ static void ClearPadicAux(void)
 {
 #ifdef WITHPTHREADS
 	int id, totnum = AM.totalnumberofthreads;
+	/* Startup errors can precede allocation of the thread-private structures. */
+	if ( AB == NULL || AB[0] == NULL ) return;
 	totnum += GetNumberOfSortBots(totnum - 1);
 	for ( id = 0; id < totnum; id++ ) {
 		if ( AB[id]->T.padic_aux_ ) {

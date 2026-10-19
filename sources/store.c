@@ -3973,42 +3973,42 @@ static void ResizeCoeff32(UBYTE **bout, UBYTE *bend, UBYTE *top)
 
 	}
 	else {
-		/* 2 -> 4 */
+		/* 2 -> 4. The 16-bit limbs are stored in signed 32-bit cells. */
 		int32_t len = (end - 1 - out) / 2;
 		if ( len == 1 ) {
-			*out = *(uint16_t *)out;
+			*out = (uint16_t)*out;
 			++out;
-			*out = *(uint16_t *)out;
+			*out = (uint16_t)*out;
 			++out;
 			++out;
 		}
 		else {
 			p = out;
-			*out = *(uint16_t *)out;
+			*out = (uint16_t)*out;
 			in = out + 1;
 			for ( i = 1; i < len; ++i ) {
 				/* shift */
-				*out = (uint32_t)(*(uint16_t *)out)
-					+ ((uint32_t)(*(uint16_t *)in) << 16);
+				*out = (uint32_t)((uint16_t)*out)
+					+ ((uint32_t)((uint16_t)*in) << 16);
 				++in;
 				if ( ++i == len ) break;
 				/* copy */
 				++out;
-				*out = *(uint16_t *)in;
+				*out = (uint16_t)*in;
 				++in;
 			}
 			++out;
-			*out = *(uint16_t *)in;
+			*out = (uint16_t)*in;
 			++in;
 			for ( i = 1; i < len; ++i ) {
 				/* shift */
-				*out = (uint32_t)(*(uint16_t *)out)
-					+ ((uint32_t)(*(uint16_t *)in) << 16);
+				*out = (uint32_t)((uint16_t)*out)
+					+ ((uint32_t)((uint16_t)*in) << 16);
 				++in;
 				if ( ++i == len ) break;
 				/* copy */
 				++out;
-				*out = *(uint16_t *)in;
+				*out = (uint16_t)*in;
 				++in;
 			}
 			++out;
