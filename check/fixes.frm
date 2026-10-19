@@ -5762,6 +5762,7 @@ assert result("ZERO") =~ expr("0")
 *--#[ padic_small_rational_staged_precision :
 #StartPadic 7,3
 Format PadicPrint off;
+* Rational scaling is exact; the input's stored precision remains a bound.
 Local UNIT = padic_(7,0,3,3);
 Local POS = padic_(7,1,3,3);
 Local NEG = padic_(7,-2,3,3);
@@ -5791,14 +5792,14 @@ expected = {
   "U" => "padic_(7,0,3,173)",
   "UM" => "padic_(7,0,3,170)",
   "P" => "padic_(7,1,3,26)",
-  "N" => "padic_(7,-2,3,516)",
-  "NM" => "padic_(7,-2,3,513)",
-  "L" => "padic_(7,1,3,26)",
+  "N" => "padic_(7,-2,3,8405)",
+  "NM" => "padic_(7,-2,3,8402)",
+  "L" => "padic_(7,1,2,5)",
   "H" => "padic_(7,1,3,26)",
   "Z" => "0",
   "A" => "0",
   "NUM" => "padic_(7,1,3,26)",
-  "DEN" => "padic_(7,-1,3,3)",
+  "DEN" => "padic_(7,-1,2,3)",
   "OUTSIDE" => "padic_(7,0,3,129)",
   "CANONICAL" => "padic_(7,1,3,26)"
 }
@@ -5827,6 +5828,7 @@ assert result("NUMERATOR") =~ expr("padic_(2305843009213693951,0,1,2305843007066
 *--#[ padic_small_rational_negative_cache_boundary :
 #StartPadic 7,3
 Format PadicPrint off;
+* Divide the represented unit exactly, including beyond the cached powers.
 Local EDGE = padic_(7,-3,3,117648);
 Local OUTSIDE = padic_(7,-4,3,823542);
 Local LOW = padic_(7,-3,1,2400);
@@ -5841,15 +5843,16 @@ Print E,M,O,L,X;
 .end
 #require flint?
 assert succeeded?
-assert result("E") =~ expr("padic_(7,-3,3,117477)")
-assert result("M") =~ expr("padic_(7,-3,3,117478)")
-assert result("O") =~ expr("padic_(7,-4,3,823371)")
-assert result("L") =~ expr("padic_(7,-3,3,59853)")
-assert result("X") =~ expr("padic_(7,-3,3,344)")
+assert result("E") =~ expr("padic_(7,-3,3,58824)")
+assert result("M") =~ expr("padic_(7,-3,3,58825)")
+assert result("O") =~ expr("padic_(7,-4,3,411771)")
+assert result("L") =~ expr("padic_(7,-3,1,1200)")
+assert result("X") =~ expr("padic_(7,-3,3,1)")
 *--#] padic_small_rational_negative_cache_boundary :
 *--#[ padic_cached_arithmetic_precision :
 #StartPadic 7,3
 Format PadicPrint off;
+* Exact p^3 scaling can shift a negative valuation into the known range.
 Local HIGH = padic_(7,0,4,2000);
 Local HIGHNEG = padic_(7,-1,4,10000);
 Local UNIT = padic_(7,-2,3,3);
@@ -5868,13 +5871,13 @@ Print H,N,Z,M,CANCEL,WRAP,DIVISIBLE,MIXED;
 assert succeeded?
 expected = {
   "H" => "padic_(7,0,3,314)",
-  "N" => "padic_(7,-1,3,884)",
-  "Z" => "0",
-  "M" => "padic_(7,-2,3,1026)",
+  "N" => "padic_(7,-1,3,198)",
+  "Z" => "padic_(7,1,3,3)",
+  "M" => "padic_(7,-2,3,16804)",
   "CANCEL" => "0",
   "WRAP" => "padic_(7,-1,3,1)",
   "DIVISIBLE" => "padic_(7,1,3,1)",
-  "MIXED" => "padic_(7,-1,3,20)"
+  "MIXED" => "padic_(7,-1,2,20)"
 }
 expected.each do |name, value|
   assert result(name) =~ expr(value)
@@ -5883,6 +5886,7 @@ end
 *--#[ padic_minus_one_staged_precision :
 #StartPadic 7,3
 Format PadicPrint off;
+* Negation preserves stored precision and complements modulo p^(N-v).
 Local UNIT = padic_(7,0,3,3);
 Local POS = padic_(7,1,3,3);
 Local NEG = padic_(7,-2,3,3);
@@ -5909,13 +5913,13 @@ assert succeeded?
 expected = {
   "U" => "padic_(7,0,3,340)",
   "P" => "padic_(7,1,3,46)",
-  "N" => "padic_(7,-2,3,1026)",
-  "E" => "padic_(7,-3,3,117307)",
-  "L" => "padic_(7,-3,3,114906)",
-  "H" => "padic_(7,-2,3,14562)",
-  "O" => "padic_(7,-4,3,823201)",
-  "S" => "padic_(7,-2,3,15781)",
-  "D" => "padic_(7,-1,3,1026)"
+  "N" => "padic_(7,-2,3,16804)",
+  "E" => "padic_(7,-3,3,1)",
+  "L" => "padic_(7,-3,1,1)",
+  "H" => "padic_(7,-2,3,842)",
+  "O" => "padic_(7,-4,3,1)",
+  "S" => "padic_(7,-2,3,3)",
+  "D" => "padic_(7,-1,3,2398)"
 }
 expected.each do |name, value|
   assert result(name) =~ expr(value)
@@ -5924,6 +5928,7 @@ end
 *--#[ padic_signed_native_integer_staging :
 #StartPadic 7,2
 Format PadicPrint off;
+* Signed integer scaling uses the full unit modulus and retains input bounds.
 Local UNIT = padic_(7,-1,2,1);
 Local POS = padic_(7,1,2,1);
 Local EDGE = padic_(7,-2,2,48);
@@ -5948,13 +5953,13 @@ Print P,N,F,V,E,L,H,O,D,I,Z;
 assert succeeded?
 expected = {
   "P" => "padic_(7,-1,2,2)",
-  "N" => "padic_(7,-1,2,47)",
-  "F" => "padic_(7,-1,2,41)",
+  "N" => "padic_(7,-1,2,341)",
+  "F" => "padic_(7,-1,2,335)",
   "V" => "padic_(7,1,2,5)",
-  "E" => "padic_(7,-2,2,2256)",
-  "L" => "padic_(7,-1,2,47)",
-  "H" => "padic_(7,-1,2,296)",
-  "O" => "padic_(7,-3,2,47)",
+  "E" => "padic_(7,-2,2,2305)",
+  "L" => "padic_(7,-1,1,47)",
+  "H" => "padic_(7,-1,2,2)",
+  "O" => "padic_(7,-3,2,16805)",
   "D" => "padic_(7,0,2,1)",
   "I" => "padic_(7,-1,1,1)",
   "Z" => "0"
@@ -5966,6 +5971,7 @@ end
 *--#[ padic_unequal_valuation_cached_addition :
 #StartPadic 7,3
 Format PadicPrint off;
+* Unequal valuations do not restore digits absent from the lower-precision input.
 Local A = padic_(7,-2,3,1)+padic_(7,-1,3,2);
 Local B = padic_(7,-1,3,2)+padic_(7,-2,3,1);
 Local C = padic_(7,0,3,342)+padic_(7,1,3,48);
@@ -5990,7 +5996,7 @@ expected = {
   "SHIFT" => "padic_(7,-2,3,344)",
   "MISS" => "padic_(7,-2,3,2402)",
   "OUTSIDE" => "padic_(7,-4,3,8)",
-  "LOW" => "padic_(7,-2,3,15)",
+  "LOW" => "padic_(7,-2,1,15)",
   "HIGH" => "padic_(7,-2,3,15979)",
   "Z" => "padic_(7,-1,3,2)",
   "CANCEL" => "0",
@@ -6141,3 +6147,291 @@ assert result("MIXED") =~ expr("0")
 assert result("CANCEL") =~ expr("0")
 assert result("NEGATIVE") =~ expr("padic_(7,0,3,342)")
 *--#] padic_normalized_sign_patch_merge :
+*--#[ padic_precision_cancellation :
+Off Statistics;
+#StartPadic 101,12
+Local A = 1/101^2;
+ToPadic;
+.sort
+Local D = A-A;
+Print D;
+.sort
+#$n = termsin_(D);
+#if (`$n' != 0)
+  #terminate 1
+#endif
+.end
+#require flint?
+assert succeeded?
+assert result("D") =~ expr("0")
+*--#] padic_precision_cancellation :
+*--#[ padic_precision_rational_scaling :
+#StartPadic 101,12
+Format 255;
+Format PadicPrint off;
+* Exact rational multipliers must provide guard digits for negative valuations.
+Local NEGATE = -padic_(101,-2,12,1);
+Local SMALL = -1/2*padic_(101,-2,12,1);
+* The required arithmetic modulus lies beyond the context's cached powers.
+Local DEEP = -1/2*padic_(101,-13,12,1);
+* Numerator and denominator exceed the small-rational shortcut's bounds.
+Local GENERAL = -102/103*padic_(101,-2,12,1);
+Local WIDE = -1/2*padic_(101,-2,20,101^21+7);
+Local POSITIVE = -2/3*padic_(101,1,20,101^18+1);
+Local SHORT = -1/2*padic_(101,1,3,1);
+Local NUMPOWER = -101/103*padic_(101,-2,3,1);
+Local LOWER = padic_(101,1,3,1)/101;
+Local HIGHER = 101*padic_(101,-1,3,1);
+Local NEGATIVE = padic_(101,0,3,1)/101^5;
+* Test product valuations below, at, and above the active precision.
+Local BELOWPRECISION = 101*padic_(101,10,20,1);
+Local ATPRECISION = 101^2*padic_(101,10,20,1);
+Local ABOVEPRECISION = 101^3/2*padic_(101,10,20,1);
+Local NEGATIVEZERO = 101^20*padic_(101,-2,12,1);
+Print;
+.sort
+* A preceding low-precision operation must not change rational conversion.
+Local RESET = -1;
+ToPadic;
+Print RESET;
+.end
+#require flint?
+assert succeeded?
+expected = {
+  "NEGATE" => [-2, 12, -1, 1],
+  "SMALL" => [-2, 12, -1, 2],
+  "DEEP" => [-13, 12, -1, 2],
+  "GENERAL" => [-2, 12, -102, 103],
+  "WIDE" => [-2, 12, -7, 2],
+  "POSITIVE" => [1, 12, -2, 3],
+  "SHORT" => [1, 3, -1, 2],
+  "NUMPOWER" => [-1, 4, -1, 103],
+  "LOWER" => [0, 2, 1, 1],
+  "HIGHER" => [0, 4, 1, 1],
+  "NEGATIVE" => [-5, -2, 1, 1],
+  "BELOWPRECISION" => [11, 12, 1, 1],
+  "RESET" => [0, 12, -1, 1]
+}
+expected.each do |name, value|
+  valuation, precision, numerator, denominator = value
+  modulus = 101**(precision-valuation)
+  # Compute the exact multiplier's residue independently with Euclid.
+  a, b = modulus, denominator
+  x, y = 0, 1
+  until b == 0
+    quotient = a/b
+    a, b = b, a-quotient*b
+    x, y = y, x-quotient*y
+  end
+  assert_equal 1, a
+  unit = numerator*x % modulus
+  assert result(name).gsub(/\\\s*/, "") =~ expr("padic_(101,#{valuation},#{precision},#{unit})")
+end
+assert result("ATPRECISION") =~ expr("0")
+assert result("ABOVEPRECISION") =~ expr("0")
+assert result("NEGATIVEZERO") =~ expr("0")
+*--#] padic_precision_rational_scaling :
+*--#[ padic_precision_arithmetic :
+#StartPadic 101,12
+Format PadicPrint off;
+Local ADDUNIT = padic_(101,0,3,1)+padic_(101,0,5,2);
+Local ADDVAL = padic_(101,-2,3,1)+padic_(101,1,5,2);
+Local ADDRAT = padic_(101,0,3,1)+1;
+Local REVERSE = 1+padic_(101,0,3,1);
+Local MULNEG = padic_(101,-2,12,1)*padic_(101,0,12,2);
+Local MULLOW = padic_(101,2,5,1)*padic_(101,-1,4,2);
+Local INV = 1/padic_(101,2,5,1);
+Local INVNEG = 1/padic_(101,-2,5,1);
+Local DIV = padic_(101,2,5,1)/padic_(101,1,4,1);
+Local INVUNIT = 1/padic_(101,2,7,3);
+Local INVNEGUNIT = 1/padic_(101,-2,5,13);
+* Exercise each independent division precision bound with nontrivial units.
+Local DIVNUM = padic_(101,-1,5,17)/padic_(101,2,10,13);
+Local DIVDEN = padic_(101,-1,10,17)/padic_(101,2,7,13);
+* Absolute precision may legitimately become zero or negative.
+Local ADDZERO = padic_(101,-3,0,1)+padic_(101,-2,1,2);
+Local ADDNEG = padic_(101,-3,-1,1)+padic_(101,-2,0,2);
+Local MULZERO = padic_(101,-2,2,1)*padic_(101,-1,2,2);
+Local MULNEGATIVE = padic_(101,-3,1,1)*padic_(101,-2,3,2);
+Local INVZERO = 1/padic_(101,2,4,1);
+Local INVNEGATIVE = 1/padic_(101,3,4,1);
+Local DIVZERO = padic_(101,0,2,1)/padic_(101,2,4,1);
+Local DIVNEGATIVE = padic_(101,0,1,1)/padic_(101,3,5,1);
+Print;
+.end
+#require flint?
+assert succeeded?
+expected = {
+  "ADDUNIT" => [0, 3, 3],
+  "ADDVAL" => [-2, 3, 2060603],
+  "ADDRAT" => [0, 3, 2],
+  "REVERSE" => [0, 3, 2],
+  "MULNEG" => [-2, 10, 2],
+  "MULLOW" => [1, 4, 2],
+  "INV" => [-2, 1, 1],
+  "INVNEG" => [2, 9, 1],
+  "DIV" => [1, 4, 1],
+  "ADDZERO" => [-3, 0, 203],
+  "ADDNEG" => [-3, -1, 203],
+  "MULZERO" => [-3, 0, 2],
+  "MULNEGATIVE" => [-5, -1, 2],
+  "INVZERO" => [-2, 0, 1],
+  "INVNEGATIVE" => [-3, -2, 1],
+  "DIVZERO" => [-2, 0, 1],
+  "DIVNEGATIVE" => [-3, -2, 1]
+}
+expected.each do |name, value|
+  assert result(name) =~ expr("padic_(101,#{value.join(",")})")
+end
+quotients = {
+  "INVUNIT" => [-2, 3, 1, 3],
+  "INVNEGUNIT" => [2, 9, 1, 13],
+  "DIVNUM" => [-3, 3, 17, 13],
+  "DIVDEN" => [-3, 2, 17, 13]
+}
+quotients.each do |name, value|
+  valuation, precision, numerator, denominator = value
+  modulus = 101**(precision-valuation)
+  a, b = modulus, denominator
+  x, y = 0, 1
+  until b == 0
+    quotient = a/b
+    a, b = b, a-quotient*b
+    x, y = y, x-quotient*y
+  end
+  assert_equal 1, a
+  unit = numerator*x % modulus
+  assert result(name) =~ expr("padic_(101,#{valuation},#{precision},#{unit})")
+end
+*--#] padic_precision_arithmetic :
+*--#[ padic_precision_patch_merge :
+#: termsinsmall 16
+#StartPadic 101,12
+Format PadicPrint off;
+Symbols x,b1,...,b8;
+Local BOTH = (padic_(101,0,3,1)*x+padic_(101,0,5,2))*(1+b1+...+b8)^3;
+Local MIXED = (padic_(101,0,3,1)*x+1)*(1+b1+...+b8)^3;
+Local REVERSE = (1+padic_(101,0,3,1)*x)*(1+b1+...+b8)^3;
+.sort
+id x = 1;
+#do i=1,8
+  id b`i' = 1;
+#enddo
+Print;
+.end
+#require flint?
+assert succeeded?
+assert result("BOTH") =~ expr("padic_(101,0,3,2187)")
+assert result("MIXED") =~ expr("padic_(101,0,3,1458)")
+assert result("REVERSE") =~ expr("padic_(101,0,3,1458)")
+*--#] padic_precision_patch_merge :
+*--#[ padic_precision_scratch_reuse :
+#StartPadic 101,12
+Format 255;
+Format PadicPrint off;
+* Each module starts with only its new expression, reusing arithmetic scratch.
+Local LOWADD = padic_(101,0,3,1)+padic_(101,0,5,2);
+Print;
+.sort
+Drop LOWADD;
+Local AFTERADD = -1/2*padic_(101,-2,12,3);
+Print;
+.sort
+Drop AFTERADD;
+Local LOWMUL = padic_(101,2,5,3)*padic_(101,-1,4,2);
+Print;
+.sort
+Drop LOWMUL;
+Local AFTERMUL = padic_(101,0,12,3)+padic_(101,0,12,4);
+Print;
+.sort
+Drop AFTERMUL;
+Local LOWDIV = padic_(101,-1,5,17)/padic_(101,2,10,13);
+Print;
+.sort
+Drop LOWDIV;
+Local AFTERDIV = padic_(101,0,12,5)*padic_(101,0,12,6);
+Print;
+.sort
+Drop AFTERDIV;
+Local LOWINV = 1/padic_(101,2,5,3);
+Print;
+.sort
+Drop LOWINV;
+Local AFTERINV = padic_(101,-1,12,5)/padic_(101,0,12,3);
+Print;
+.sort
+Drop AFTERINV;
+Local LOWRAT = padic_(101,0,3,1)/101^5;
+Print;
+.sort
+Drop LOWRAT;
+Local AFTERRAT = 1/padic_(101,0,12,3);
+Print;
+.end
+#require flint?
+assert succeeded?
+expected = {
+  "LOWADD" => [0, 3, 3, 1],
+  "AFTERADD" => [-2, 12, -3, 2],
+  "LOWMUL" => [1, 4, 6, 1],
+  "AFTERMUL" => [0, 12, 7, 1],
+  "LOWDIV" => [-3, 3, 17, 13],
+  "AFTERDIV" => [0, 12, 30, 1],
+  "LOWINV" => [-2, 1, 1, 3],
+  "AFTERINV" => [-1, 11, 5, 3],
+  "LOWRAT" => [-5, -2, 1, 1],
+  "AFTERRAT" => [0, 12, 1, 3]
+}
+expected.each do |name, value|
+  valuation, precision, numerator, denominator = value
+  modulus = 101**(precision-valuation)
+  a, b = modulus, denominator
+  x, y = 0, 1
+  until b == 0
+    quotient = a/b
+    a, b = b, a-quotient*b
+    x, y = y, x-quotient*y
+  end
+  assert_equal 1, a
+  unit = numerator*x % modulus
+  assert result(name) =~ expr("padic_(101,#{valuation},#{precision},#{unit})")
+end
+*--#] padic_precision_scratch_reuse :
+*--#[ padic_precision_nonpositive_context :
+#StartPadic 101,0
+Format PadicPrint off;
+Local SMALL = -1/2*padic_(101,-3,2,3);
+Local GENERAL = -102/103*padic_(101,-3,2,3);
+Local CONVERT = -1/(2*101^3);
+ToPadic;
+Print;
+.end
+#StartPadic 101,-2
+Format PadicPrint off;
+Local SMALL = -1/2*padic_(101,-5,-1,3);
+Local GENERAL = -102/103*padic_(101,-5,-1,3);
+Local CONVERT = -1/(2*101^5);
+ToPadic;
+Print;
+.end
+#require flint?
+assert succeeded?
+# Contexts with N <= 0 cannot use the positive-precision shortcut.
+[[-3, 0], [-5, -2]].each_with_index do |bounds, pass|
+  valuation, precision = bounds
+  modulus = 101**(precision-valuation)
+  { "SMALL" => [-3, 2], "GENERAL" => [-306, 103], "CONVERT" => [-1, 2] }.each do |name, fraction|
+    a, b = modulus, fraction[1]
+    x, y = 0, 1
+    until b == 0
+      quotient = a/b
+      a, b = b, a-quotient*b
+      x, y = y, x-quotient*y
+    end
+    assert_equal 1, a
+    unit = fraction[0]*x % modulus
+    assert result(name, pass) =~ expr("padic_(101,#{valuation},#{precision},#{unit})")
+  end
+end
+*--#] padic_precision_nonpositive_context :

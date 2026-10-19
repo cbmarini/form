@@ -2399,7 +2399,7 @@ assert succeeded?
 assert result("F") =~ expr("(3*7^-1 + 2*7^1)")
 assert result("G") =~ expr("(6*7^1 + 4*7^2 + 2*7^3 + 5*7^4 + 3*7^5 + 1*7^7 + 2*7^8 + 4*7^9)")
 assert result("MUL") =~ expr("(4 + 4*7^1 + 5*7^2 + 3*7^3 + 1*7^5 + 2*7^6 + 4*7^7 + 1*7^8)")
-assert result("DIV") =~ expr("(4*7^-2 + 2*7^-1 + 3 + 6*7^1 + 3*7^7 + 1*7^9)")
+assert result("DIV") =~ expr("(4*7^-2 + 2*7^-1 + 3 + 6*7^1)")
 *--#] padic_1 :
 *--#[ padic_2 :
 #-

@@ -114,12 +114,9 @@ static void SetPadicInteger(fmpz_t out, UWORD *in, WORD count);
 static int TestNativePadicShape(const WORD *fun);
 static int UnpackedPadicKnownReduced(const padic_t in, const WORD *arg);
 static void SetPadicRational(padic_t out, const fmpq_t in);
-static void ReduceSmallPadicQuotient(fmpz_t unit, const fmpz_t modulus, const fmpq_t q, int bounded);
 static int SmallPadicRationalFits(slong N, const fmpq_t q);
 static void DivideSmallPadicRational(padic_t out, const fmpq_t q, int bounded);
-static int MultiplyNegativePadicFraction(PHEAD padic_t out, const padic_t in, const fmpq_t q);
-static const fmpz *CachedPadicModulus(fmpz_t scratch, slong N, slong v);
-static void MultiplyReducedPadics(padic_t out, const padic_t left, const padic_t right, fmpz_t scratch);
+static const fmpz *CachedPadicModulus(PHEAD slong N, slong v);
 static void AddReducedPadics(PHEAD padic_t out, const padic_t in1, const padic_t in2);
 static int AddPadics(PHEAD WORD *outfun, WORD *in1, WORD *in2);
 static int AddRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat);
@@ -952,23 +949,6 @@ static void SetPadicRational(padic_t out, const fmpq_t in)
 }
 /*
  		#] SetPadicRational :
- 		#[ ReduceSmallPadicQuotient :
-
-	Reduces the quotient modulo M = modulus after exact division.
-	For a proper fraction and an input unit below M, the quotient is in
-	(-M,2M), so one addition or subtraction suffices. Without that bound,
-	use the general remainder operation.
-*/
-static void ReduceSmallPadicQuotient(fmpz_t unit, const fmpz_t modulus, const fmpq_t q, int bounded)
-{
-	if ( bounded && fmpz_cmpabs(fmpq_numref(q),fmpq_denref(q)) < 0 ) {
-		if ( fmpz_sgn(unit) < 0 ) fmpz_add(unit,unit,modulus);
-		else if ( fmpz_cmp(unit,modulus) >= 0 ) fmpz_sub(unit,unit,modulus);
-	}
-	else fmpz_mod(unit,unit,modulus);
-}
-/*
- 		#] ReduceSmallPadicQuotient :
  		#[ SmallPadicRationalFits :
 
 	Checks the precision and fraction bounds for the small-rational shortcut.
@@ -996,114 +976,52 @@ static void DivideSmallPadicRational(padic_t out, const fmpq_t q, int bounded)
 	int owned;
 	d = fmpz_get_ui(fmpq_denref(q));
 	owned = _padic_ctx_pow_ui(modulus,(ulong)(N-v),PadicContext);
+	/* Add a multiple of the modulus to make the numerator divisible by d. */
 	inverse = n_invmod(fmpz_fdiv_ui(modulus,d),d);
 	remainder = fmpz_fdiv_ui(padic_unit(out),d);
 	correction = remainder ? d-n_mulmod2(remainder,inverse,d) : 0;
 	fmpz_addmul_ui(padic_unit(out),modulus,correction);
 	fmpz_divexact_ui(padic_unit(out),padic_unit(out),d);
-	ReduceSmallPadicQuotient(padic_unit(out),modulus,q,bounded);
+	/* A bounded proper fraction needs at most one modular correction. */
+	if ( bounded && fmpz_cmpabs(fmpq_numref(q),fmpq_denref(q)) < 0 ) {
+		if ( fmpz_sgn(padic_unit(out)) < 0 )
+			fmpz_add(padic_unit(out),padic_unit(out),modulus);
+		else if ( fmpz_cmp(padic_unit(out),modulus) >= 0 )
+			fmpz_sub(padic_unit(out),padic_unit(out),modulus);
+	}
+	/* Otherwise use the general remainder operation. */
+	else fmpz_mod(padic_unit(out),padic_unit(out),modulus);
 	if ( fmpz_is_zero(padic_unit(out)) ) padic_val(out) = 0;
 	if ( owned ) fmpz_clear(modulus);
 }
 /*
  		#] DivideSmallPadicRational :
- 		#[ MultiplyNegativePadicFraction :
-
-	Multiplies a reduced input u*p^v, v < 0, by a small fraction a/d.
-	Preserve the rational converted at N: c = (a+k*p^N)/d. Only u*k modulo
-	p^-v contributes to u*c modulo p^(N-v). Correct the shortened numerator
-	before exact division rather than converting a/d directly at N-v.
-
-	Uses thread-local auxiliary integers as scratch, distinct from the
-	input and output units. Both powers must already be cached.
-	Return 1 when handled, or 0 to retain the general FLINT calculation.
-*/
-static int MultiplyNegativePadicFraction(PHEAD padic_t out, const padic_t in, const fmpq_t q)
-{
-	slong N = padic_prec(out), v = padic_val(in);
-	fmpz *modulus = pauxprime, *low = padic_unit(paux2);
-	fmpz_t base, lowmod;
-	ulong d, inverse, remainder, correction;
-	if ( v < -N || (ulong)N-(ulong)v > (ulong)(FLINT_BITS == 64 ? INT64_MAX : INT32_MAX) ) return(0);
-	if ( _padic_ctx_pow_ui(base,(ulong)N,PadicContext) ) { fmpz_clear(base); return(0); }
-	if ( _padic_ctx_pow_ui(lowmod,(ulong)-v,PadicContext) ) { fmpz_clear(lowmod); return(0); }
-	d = fmpz_get_ui(fmpq_denref(q));
-	inverse = n_invmod(fmpz_fdiv_ui(base,d),d);
-	remainder = fmpz_fdiv_ui(fmpq_numref(q),d);
-	correction = remainder ? d-n_mulmod2(remainder,inverse,d) : 0;
-	fmpz_mul(modulus,base,lowmod);
-	fmpz_mod(low,padic_unit(in),lowmod);
-	fmpz_mul_ui(low,low,correction);
-	fmpz_mod(low,low,lowmod);
-	fmpz_mul(low,low,base);
-	fmpz_mul(padic_unit(out),padic_unit(in),fmpq_numref(q));
-	fmpz_add(padic_unit(out),padic_unit(out),low);
-	inverse = n_invmod(fmpz_fdiv_ui(modulus,d),d);
-	remainder = fmpz_fdiv_ui(padic_unit(out),d);
-	correction = remainder ? d-n_mulmod2(remainder,inverse,d) : 0;
-	fmpz_addmul_ui(padic_unit(out),modulus,correction);
-	fmpz_divexact_ui(padic_unit(out),padic_unit(out),d);
-	ReduceSmallPadicQuotient(padic_unit(out),modulus,q,padic_prec(in) <= N);
-	padic_val(out) = fmpz_is_zero(padic_unit(out)) ? 0 : v;
-	return(1);
-}
-/*
- 		#] MultiplyNegativePadicFraction :
  		#[ CachedPadicModulus :
 
 	Returns the modulus p^(N-v) from the existing context cache, or from
 	the product of two cached powers when v is negative. Return NULL when
-	the required powers or exponent range are unavailable.
+	the required powers are unavailable.
 
-	The initialized scratch integer must be distinct from the arithmetic
-	operands. The returned pointer is borrowed and must not be cleared.
+	Uses the thread-local auxiliary integer as scratch. The returned pointer
+	is borrowed and must not be cleared or kept across another scratch use.
 */
-static const fmpz *CachedPadicModulus(fmpz_t scratch, slong N, slong v)
+static const fmpz *CachedPadicModulus(PHEAD slong N, slong v)
 {
-	ulong exponent;
+	slong exponent;
 	if ( N <= v ) return(NULL);
-	exponent = (ulong)N-(ulong)v;
-	if ( exponent > (ulong)(FLINT_BITS == 64 ? INT64_MAX : INT32_MAX) ) return(NULL);
-	if ( PadicContext->min <= (slong)exponent && (slong)exponent < PadicContext->max )
-		return(PadicContext->pow+((slong)exponent-PadicContext->min));
+	/* This can potentially overflow. Should be fixed. */
+	exponent = N-v;
+	if ( PadicContext->min <= exponent && exponent < PadicContext->max )
+		return(PadicContext->pow+(exponent-PadicContext->min));
 	if ( N <= 0 || v >= 0 || v < -N
 	 || N < PadicContext->min || N >= PadicContext->max
 	 || -v < PadicContext->min || -v >= PadicContext->max ) return(NULL);
-	fmpz_mul(scratch,PadicContext->pow+(N-PadicContext->min),
+	fmpz_mul(pauxprime,PadicContext->pow+(N-PadicContext->min),
 		PadicContext->pow+(-v-PadicContext->min));
-	return(scratch);
+	return(pauxprime);
 }
 /*
  		#] CachedPadicModulus :
- 		#[ MultiplyReducedPadics :
-
-	Multiplies two reduced p-adics at the output precision. Reduce the unit
-	product with a cached modulus when the valuation sum is representable.
-	Other cases use FLINT. The rational operand, if any, has already been
-	converted at N, including when the other operand has negative valuation.
-	The initialized scratch integer must be distinct from all operand units.
-*/
-static void MultiplyReducedPadics(padic_t out, const padic_t left, const padic_t right, fmpz_t scratch)
-{
-	slong v1 = padic_val(left), v2 = padic_val(right), v;
-	slong maximum = FLINT_BITS == 64 ? INT64_MAX : INT32_MAX;
-	slong minimum = FLINT_BITS == 64 ? INT64_MIN : INT32_MIN;
-	const fmpz *modulus;
-	if ( padic_is_zero(left) || padic_is_zero(right) ) { padic_zero(out); return; }
-	if ( (v2 > 0 && v1 > maximum-v2) || (v2 < 0 && v1 < minimum-v2) ) goto fallback;
-	v = v1+v2;
-	if ( v >= padic_prec(out) ) { padic_zero(out); return; }
-	modulus = CachedPadicModulus(scratch,padic_prec(out),v);
-	if ( !modulus ) goto fallback;
-	fmpz_mul(padic_unit(out),padic_unit(left),padic_unit(right));
-	fmpz_mod(padic_unit(out),padic_unit(out),modulus);
-	padic_val(out) = fmpz_is_zero(padic_unit(out)) ? 0 : v;
-	return;
-fallback:
-	padic_mul(out,left,right,PadicContext);
-}
-/*
- 		#] MultiplyReducedPadics :
  		#[ AddReducedPadics :
 
 	Adds two reduced p-adics at the output precision, using the cached
@@ -1112,11 +1030,13 @@ fallback:
 */
 static void AddReducedPadics(PHEAD padic_t out, const padic_t in1, const padic_t in2)
 {
-	slong N = padic_prec(out), v = padic_val(in1);
+	slong N = FLINT_MIN(PadicPrecision,FLINT_MIN(padic_prec(in1),padic_prec(in2)));
+	slong v = padic_val(in1);
 	const fmpz *modulus;
+	padic_prec(out) = N;
 	/* The unit shortcut requires matching precision and valuation. */
 	if ( v != padic_val(in2) || N != padic_prec(in1) || N != padic_prec(in2) ) goto fallback;
-	modulus = CachedPadicModulus(pauxprime,N,v);
+	modulus = CachedPadicModulus(BHEAD N,v);
 	if ( !modulus ) goto fallback;
 	/* Each unit is below the modulus, so one subtraction suffices. */
 	fmpz_add(padic_unit(out),padic_unit(in1),padic_unit(in2));
@@ -1134,7 +1054,8 @@ fallback:
  		#[ AddRatToPadic :
 
 	Adds a FORM rational coefficient to a padic_ function in infun.
-	The rational is converted at the active output precision.
+	The exact rational is converted at the input's precision, capped at the
+	active precision. Addition cannot recover discarded input digits.
 
 	Return value:
 	- 0  on success, with a non-zero sum packed into outfun,
@@ -1146,7 +1067,7 @@ static int AddRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD n
 	if ( !PadicActive ) return(-1);
 	UnpackPadic(paux1,infun);
 	FormRatToFmpq(pauxq1,formrat,nrat);
-	padic_prec(paux2) = PadicPrecision;
+	padic_prec(paux2) = FLINT_MIN(PadicPrecision,padic_prec(paux1));
 	SetPadicRational(paux2,pauxq1);
 	AddReducedPadics(BHEAD paux3,paux1,paux2);
 	PackPadic(outfun,paux3);
@@ -1168,29 +1089,51 @@ static int AddRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD n
 */
 int MulRatToPadic(PHEAD WORD *outfun, WORD *infun, UWORD *formrat, WORD nrat)
 {
-	slong v;
-	int handled = 0;
+	slong v, w, N;
 	if ( !PadicActive ) return(-1);
 	UnpackPadic(paux1,infun);
 	FormRatToFmpq(pauxq1,formrat,nrat);
 	v = padic_val(paux1);
-	if ( SmallPadicRationalFits(PadicPrecision,pauxq1) ) {
-		/* Preserve rational conversion at the active precision. */
-		if ( v < 0 ) handled = MultiplyNegativePadicFraction(BHEAD paux3,paux1,pauxq1);
+	N = FLINT_MIN(PadicPrecision,padic_prec(paux1));
+	padic_prec(paux3) = N;
+	if ( padic_is_zero(paux1) || fmpq_is_zero(pauxq1) ) padic_zero(paux3);
+	else if ( fmpz_is_one(fmpq_denref(pauxq1)) && fmpz_equal_si(fmpq_numref(pauxq1),-1) ) {
+		padic_neg(paux3,paux1,PadicContext);
+	}
+	else if ( SmallPadicRationalFits(N,pauxq1) ) {
+		/* These exact fractions have valuation zero. Divide the unit at
+		   N-v for either sign of v, retaining all required guard digits. */
+		if ( v >= N ) padic_zero(paux3);
 		else {
-			if ( v >= PadicPrecision ) padic_zero(paux3);
-			else {
-				fmpz_mul(padic_unit(paux3),padic_unit(paux1),fmpq_numref(pauxq1));
-				padic_val(paux3) = v;
-				DivideSmallPadicRational(paux3,pauxq1,padic_prec(paux1) <= PadicPrecision);
-			}
-			handled = 1;
+			fmpz_mul(padic_unit(paux3),padic_unit(paux1),fmpq_numref(pauxq1));
+			padic_val(paux3) = v;
+			DivideSmallPadicRational(paux3,pauxq1,padic_prec(paux1) <= N);
 		}
 	}
-	if ( !handled ) {
-		padic_prec(paux2) = PadicPrecision;
-		SetPadicRational(paux2,pauxq1);
-		MultiplyReducedPadics(paux3,paux1,paux2,pauxprime);
+	else {
+		const fmpz *modulus;
+		/* An exact rational shifts the input error and valuation by w. */
+		w = fmpz_remove(padic_unit(paux2),fmpq_numref(pauxq1),PadicContext->p);
+		w -= fmpz_remove(pauxprime,fmpq_denref(pauxq1),PadicContext->p);
+		/* This can potentially overflow. Should be fixed. */
+		N = FLINT_MIN(PadicPrecision,padic_prec(paux1)+w);
+		v += w;
+		padic_prec(paux3) = N;
+		if ( v >= N ) padic_zero(paux3);
+		else {
+			/* Use the input valuation to retain the rational's guard digits. */
+			padic_prec(paux2) = N-padic_val(paux1);
+			SetPadicRational(paux2,pauxq1);
+			/* Reduce the unit product using the cached modulus. */
+			modulus = CachedPadicModulus(BHEAD N,v);
+			if ( modulus ) {
+				fmpz_mul(padic_unit(paux3),padic_unit(paux1),padic_unit(paux2));
+				fmpz_mod(padic_unit(paux3),padic_unit(paux3),modulus);
+				padic_val(paux3) = padic_is_zero(paux3) ? 0 : v;
+			}
+			/* Use FLINT when the required modulus is not cached. */
+			else padic_mul(paux3,paux1,paux2,PadicContext);
+		}
 	}
 	PackPadic(outfun,paux3);
 	if ( padic_is_zero(paux3) ) return(1);
@@ -1231,9 +1174,15 @@ static int AddPadics(PHEAD WORD *outfun, WORD *in1, WORD *in2)
 */
 int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
+	slong N1, N2;
 	if ( !PadicActive ) return(-1);
 	UnpackPadic(paux1,fun1);
 	UnpackPadic(paux2,fun2);
+	/* Preserve the smaller relative precision, shifted to the product.
+	   This can potentially overflow. Should be fixed. */
+	N1 = padic_prec(paux1)+padic_val(paux2);
+	N2 = padic_prec(paux2)+padic_val(paux1);
+	padic_prec(paux3) = FLINT_MIN(PadicPrecision,FLINT_MIN(N1,N2));
 	padic_mul(paux3,paux1,paux2,PadicContext);
 	PackPadic(fun3,paux3);
 	if ( padic_is_zero(paux3) ) return(1);
@@ -1254,6 +1203,7 @@ int MulPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 */
 int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 {
+	slong N1, N2, v;
 	if ( !PadicActive ) return(-1);
 	UnpackPadic(paux1,fun1);
 	UnpackPadic(paux2,fun2);
@@ -1264,6 +1214,11 @@ int DivPadics(PHEAD WORD *fun3, WORD *fun1, WORD *fun2)
 		Terminate(-1);
 		return(-1);
 	}
+	v = padic_val(paux2);
+	/* This can potentially overflow. Should be fixed. */
+	N1 = padic_prec(paux1)-v;
+	N2 = padic_prec(paux2)+padic_val(paux1)-v-v;
+	padic_prec(paux3) = FLINT_MIN(PadicPrecision,FLINT_MIN(N1,N2));
 	padic_div(paux3,paux1,paux2,PadicContext);
 	PackPadic(fun3,paux3);
 	if ( padic_is_zero(paux3) ) return(1);
@@ -1292,6 +1247,9 @@ int InvPadic(PHEAD WORD *outfun, WORD *fun)
 		Terminate(-1);
 		return(-1);
 	}
+	/* This can potentially overflow. Should be fixed. */
+	padic_prec(paux3) = FLINT_MIN(PadicPrecision,
+		padic_prec(paux1)-padic_val(paux1)-padic_val(paux1));
 	padic_inv(paux3,paux1,PadicContext);
 	PackPadic(outfun,paux3);
 	if ( padic_is_zero(paux3) ) return(1);
